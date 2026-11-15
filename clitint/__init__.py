@@ -1,4 +1,4 @@
-"""termtint: coloured terminal text with no dependencies, plain wherever it isn't read on a terminal."""
+"""clitint: coloured terminal text with no dependencies, plain wherever it isn't read on a terminal."""
 from ._tint import (
     formatter,
     strip_colours,
