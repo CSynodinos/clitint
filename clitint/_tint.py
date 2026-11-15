@@ -79,10 +79,12 @@ def colours_on() -> bool:
     no escape sequence lands in a file.
 
     ``turn_colours_off`` and ``turn_colours_on`` decide before anything else. Then the
-    environment, in this order: ``CLITINT_COLOURS_OFF=1`` (and each ``add_off_switch``), ``NO_COLOR`` and
-    ``ANSI_COLORS_DISABLED`` switch colours off, ``FORCE_COLOR`` switches them on whatever the
-    streams are, and ``TERM=dumb`` switches them off. Read at every call, so a change takes
-    effect at once.
+    environment, in this order: ``NO_COLOR`` (any value but an empty one, as no-color.org has it),
+    ``ANSI_COLORS_DISABLED``, ``CLITINT_COLOURS_OFF=1`` (and each ``add_off_switch``) switch
+    colours off, ``FORCE_COLOR`` (any value but an empty one, as force-color.org has it, ``0``
+    included) switches them on whatever the streams are, and ``TERM=dumb`` switches them off.
+    Read at every call, so a change takes effect at once. On Windows, the console is asked to
+    show the sequences first; where it can't, text is plain.
     """
     if _CHOSEN is not None:                             # turn_colours_off / turn_colours_on: the program has said
         return _CHOSEN
@@ -90,23 +92,23 @@ def colours_on() -> bool:
     #* Read from ``os.environ`` as it is now: a program may have put another mapping in its place.
     data = getattr(env, "_data", None) if _FAST else None
     if type(data) is not dict:
-        if NO_COLOR in env or ANSI_COLORS_DISABLED in env:
+        if env.get(NO_COLOR) or ANSI_COLORS_DISABLED in env:
             return False
         for name in _OFF:
             if env.get(name) == "1":
                 return False
-        if FORCE_COLOR in env:
-            return True
+        if env.get(FORCE_COLOR):
+            return _CONSOLE is not None or _console_ready(True)
         if env.get(TERM) == "dumb":
             return False
         return _both_terminals()
-    if _K_NO_COLOR in data or _K_ANSI in data:
+    if data.get(_K_NO_COLOR) or _K_ANSI in data:      # an empty value is no value (b"" is falsy)
         return False
     for key in _K_OFFS:
         if data.get(key) == _V_ONE:
             return False
-    if _K_FORCE in data:
-        return True
+    if data.get(_K_FORCE):                             #* the console asked once (Windows): no call after that
+        return _CONSOLE is not None or _console_ready(True)
     if data.get(_K_TERM) == _V_DUMB:
         return False
     return _both_terminals()
@@ -142,7 +144,7 @@ def _both_terminals() -> bool:
     out, err = sys.stdout, sys.stderr
     if _streams[0] is out and _streams[1] is err:
         return _streams[2]
-    answer = _is_terminal(out) and _is_terminal(err)
+    answer = _is_terminal(out) and _is_terminal(err) and _console_ready(False)
     _streams = (out, err, answer)
     return answer
 
@@ -152,6 +154,63 @@ def _is_terminal(stream: Any) -> bool:
         return bool(stream.isatty())
     except Exception:                   # no stream at all (pythonw), a closed one, an object without isatty
         return False
+
+
+#* Whether the console shows escape sequences: None until asked (Windows only; True elsewhere).
+_CONSOLE: bool | None = None if sys.platform == "win32" else True
+
+
+def _console_ready(forced: bool) -> bool:
+    """
+    Whether the escape sequences will show as colours. On Windows 10 and 11 the console does
+    that only once a program asks it to (``ENABLE_VIRTUAL_TERMINAL_PROCESSING``), so it is
+    asked, once, for both streams. Where it refuses (an old console, no console), text is
+    plain; unless colours were forced, which says the reader knows best (a CI log, a pipe to a
+    viewer).
+    """
+    global _CONSOLE
+    if _CONSOLE is None:
+        _CONSOLE = _enable_windows_sequences()
+    return _CONSOLE or forced
+
+
+def _enable_windows_sequences() -> bool:
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        return _enable_sequences(ctypes.windll.kernel32)
+    except Exception:                                   # no ctypes, no console: plain text
+        return False
+
+
+#* What GetStdHandle takes for stdout and stderr, and the console mode that reads escape sequences.
+_STD_HANDLES = (-11, -12)
+_VIRTUAL_TERMINAL = 0x0004
+
+
+def _enable_sequences(kernel32: Any) -> bool:
+    """
+    Ask the Windows console behind stdout and stderr to read escape sequences, through
+    ``kernel32`` (``ctypes.windll.kernel32``; a parameter so that it can be tried anywhere).
+    True when every stream that is a console now reads them, or already did.
+    """
+    import ctypes
+    done = False
+    for which in _STD_HANDLES:
+        handle = kernel32.GetStdHandle(which)
+        if not handle or handle == -1:
+            continue
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            continue                                    # no console (a file, a pipe): nothing to switch on
+        if mode.value & _VIRTUAL_TERMINAL:
+            done = True
+            continue
+        if not kernel32.SetConsoleMode(handle, mode.value | _VIRTUAL_TERMINAL):
+            return False
+        done = True
+    return done
 
 
 #* While one message is built: the answer of ``colours_on`` for all of it (None: ask each time).

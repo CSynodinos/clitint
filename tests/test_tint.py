@@ -316,3 +316,85 @@ def test_one_decision_inside_another_keeps_the_outer_answer(monkeypatch):
             assert outer is inner is True
         assert clitint.decision() is True                          # the inner one left it in place
     assert clitint.decision() is None
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  THE STANDARDS: AN EMPTY VALUE IS NO VALUE
+# ═════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("fast", [True, False])
+def test_an_empty_no_color_or_force_color_says_nothing(monkeypatch, fast):
+    #* no-color.org and force-color.org: "present and not an empty string". FORCE_COLOR=0 forces too.
+    monkeypatch.setattr(tint, "_FAST", fast and tint._FAST)
+    _streams(monkeypatch, False, False)
+    monkeypatch.setenv("NO_COLOR", "")
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    assert colours_now() is True                           # an empty NO_COLOR doesn't switch off
+    monkeypatch.setenv("NO_COLOR", "0")
+    assert colours_now() is False                          # any other value does, "0" included
+    monkeypatch.delenv("NO_COLOR")
+    monkeypatch.setenv("FORCE_COLOR", "")
+    assert colours_now() is False                          # an empty FORCE_COLOR forces nothing: the streams decide
+    _streams(monkeypatch, True, True)
+    monkeypatch.setenv("FORCE_COLOR", "")
+    assert colours_now() is True
+    _streams(monkeypatch, False, False)
+    for value in ("0", "1", "3", "false"):
+        monkeypatch.setenv("FORCE_COLOR", value)
+        assert colours_now() is True, value
+
+
+def colours_now() -> bool:
+    return clitint.colours_on()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  WINDOWS: THE CONSOLE IS ASKED TO READ ESCAPE SEQUENCES
+# ═════════════════════════════════════════════════════════════════════════════
+
+class _Kernel32:
+    """A stand-in for ``ctypes.windll.kernel32``: a console per handle, its mode, and whether it takes a new one."""
+
+    def __init__(self, modes: dict[int, int | None], refuses: bool = False) -> None:
+        self.modes, self.refuses, self.set = modes, refuses, []
+
+    def GetStdHandle(self, which: int) -> int:
+        return 100 - which                                      # 111 for stdout, 112 for stderr
+
+    def GetConsoleMode(self, handle: int, mode: Any) -> bool:
+        value = self.modes.get(100 - handle)
+        if value is None:
+            return False                                        # no console: a file or a pipe
+        import ctypes
+        ctypes.cast(mode, ctypes.POINTER(ctypes.c_uint32)).contents.value = value
+        return True
+
+    def SetConsoleMode(self, handle: int, mode: int) -> bool:
+        self.set.append((100 - handle, mode))
+        return not self.refuses
+
+
+def test_the_windows_console_is_switched_to_read_sequences():
+    kernel = _Kernel32({-11: 0x3, -12: 0x3})
+    assert tint._enable_sequences(kernel) is True
+    assert kernel.set == [(-11, 0x7), (-12, 0x7)]               # the mode as it was, and virtual terminal on
+
+
+def test_a_console_that_reads_them_already_is_left_alone():
+    kernel = _Kernel32({-11: 0x7, -12: None})                   # stderr is no console
+    assert tint._enable_sequences(kernel) is True and kernel.set == []
+
+
+def test_a_console_that_refuses_or_no_console_at_all_means_plain_text(monkeypatch):
+    assert tint._enable_sequences(_Kernel32({-11: 0x3, -12: 0x3}, refuses = True)) is False
+    assert tint._enable_sequences(_Kernel32({-11: None, -12: None})) is False
+    monkeypatch.setattr(tint, "_CONSOLE", False)                # such a console, found earlier
+    _streams(monkeypatch, True, True)
+    monkeypatch.setattr(tint, "_streams", (None, None, False))
+    assert clitint.colours_on() is False                        # terminals, but the sequences would show as text
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    assert clitint.colours_on() is True                         # forced: the reader knows best
+
+
+def test_elsewhere_the_console_is_never_asked():
+    assert sys.platform == "win32" or (tint._CONSOLE is True and tint._enable_windows_sequences() is True)
