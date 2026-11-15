@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "termtint"
+dynamic = ["version"]
+description = "Coloured terminal text with no dependencies, plain wherever it isn't read on a terminal."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+keywords = ["terminal", "colour", "color", "ansi", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Terminals",
+    "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "mypy", "build", "twine"]
+
+[tool.setuptools.dynamic]
+version = { attr = "termtint.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["termtint*"]
+
+[tool.setuptools.package-data]
+termtint = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
