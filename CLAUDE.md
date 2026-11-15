@@ -41,10 +41,6 @@ It checks that the three print the same visible text before timing, runs each ca
 checks behaviour with real pseudo-terminals. After a change on the hot path, run it and update
 `benchmarks/COMPARISON.md` (numbers, and any sentence they contradict).
 
-The project lives in `/mnt/d/dev/clitint`, in its own git repository (moved out of enforced's `prototypes/` on
-2026-11-15). Also used by cfgcast (`formatter`, the two switches).
-The name `termtint` was taken on PyPI (another project, hasheramin5-cyber/TermTint): hence clitint.
-
 ## Layout
 
 ```
