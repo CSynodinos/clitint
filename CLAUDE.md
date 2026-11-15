@@ -5,15 +5,17 @@ when both stdout and stderr are terminals (or the environment / the program says
 lands in a file.
 
 It is enforced's `_formatting_tool.py` made a project of its own (2026-11-15, the owner's decision; enforced is
-`/mnt/d/dev/enforced`), and **enforced's one dependency** from its next release (`clitint>=0.1.0`). enforced imports
-it in one module (`enforced/_formatting_tool.py`), has no colour variable of its own (its users set `CLITINT_COLOURS_OFF`), exports `turn_colours_off` / `turn_colours_on`, and uses
+`/mnt/d/dev/enforced`), and **enforced's one dependency** from its next release (`clitint>=0.1.0`). Each enforced module
+imports what it uses from clitint directly; enforced has no colour variable of its own (its users set `CLITINT_COLOURS_OFF`), exports `turn_colours_off` / `turn_colours_on`, and uses
 `decide` / `decision` / `release` around a message. Its tests compare whole coloured messages byte for byte, and
 some patch `clitint._tint` (`_CHOSEN`, `colours_on`): **a change here is a change to enforced**, so run enforced's
 pytest and simulation too (`~/venvs/python_validate_3.14` and `_3.13` have clitint installed editable from here).
 
 What differs from enforced's copy:
-- The off switch is `CLITINT_COLOURS_OFF=1` (enforced: `ENFORCED_COLOURS_OFF`). `NO_COLOR`, `ANSI_COLORS_DISABLED`,
-  `FORCE_COLOR`, `TERM=dumb` are the same.
+- The off switch is `CLITINT_COLOURS_OFF=1` (enforced had `ENFORCED_COLOURS_OFF`; gone, enforced follows clitint).
+  `NO_COLOR` and `FORCE_COLOR` count when not empty (no-color.org, force-color.org; enforced's copy took any value,
+  2026-11-15). On Windows the console is switched to read escape sequences (`_console_ready`, `_enable_sequences`,
+  once, both streams); where it refuses, plain unless forced. Tried with a stand-in kernel32: no Windows machine here.
 - More styles: enforced has only those its messages use (bold and seven colours). Here also `dim`, `italic`,
   `underline`, `black`, `white`, `grey`, and backgrounds `highlight_<colour>`. Two colours or two backgrounds in a spec are
   a `ValueError`.
@@ -30,8 +32,9 @@ What differs from enforced's copy:
 pip install -e ".[dev]" --config-settings editable_mode=compat   # to make a venv again (compat: mypy sees it)
 ```
 
-Not under version control yet: enforced's `.gitignore` leaves out `prototypes/`. `git init` here, or move the
-project out as cfgcast was (`/mnt/d/dev/cfgcast`).
+The project lives in `/mnt/d/dev/clitint`, in its own git repository (moved out of enforced's `prototypes/` on
+2026-11-15). Also used by cfgcast (`formatter`, the two switches).
+The name `termtint` was taken on PyPI (another project, hasheramin5-cyber/TermTint): hence clitint.
 
 ## Layout
 
