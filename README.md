@@ -2,7 +2,7 @@
 
 # clitint
 
-**Coloured terminal text for Python 3.13+, with no dependencies.**
+**Very fast terminal text formatting for Python 3.13+, with no dependencies.**
 
 ![Python](https://img.shields.io/badge/python-3.13%2B-blue)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
@@ -12,6 +12,8 @@
 
 Text is coloured only when someone is reading it on a terminal: redirect the output to a file, a pipe or a CI log
 and it comes out plain.
+
+This library is ideal for simple and very fast formatting of text on libraries and command-line tools.
 
 ```python
 from clitint import formatter
