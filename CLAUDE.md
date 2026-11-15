@@ -1,21 +1,21 @@
-# termtint
+# clitint
 
-Coloured terminal text for Python 3.13+, no dependencies: `from termtint import formatter`. Text is coloured only
+Coloured terminal text for Python 3.13+, no dependencies: `from clitint import formatter`. Text is coloured only
 when both stdout and stderr are terminals (or the environment / the program says otherwise), so no escape sequence
 lands in a file.
 
 It is enforced's `_formatting_tool.py` made a project of its own (2026-11-15, the owner's decision; enforced is
-`/mnt/d/dev/enforced`), and **enforced's one dependency** from its next release (`termtint>=0.1.0`). enforced imports
-it in one module (`enforced/_formatting_tool.py`), has no colour variable of its own (its users set `TERMTINT_COLOURS_OFF`), exports `turn_colours_off` / `turn_colours_on`, and uses
+`/mnt/d/dev/enforced`), and **enforced's one dependency** from its next release (`clitint>=0.1.0`). enforced imports
+it in one module (`enforced/_formatting_tool.py`), has no colour variable of its own (its users set `CLITINT_COLOURS_OFF`), exports `turn_colours_off` / `turn_colours_on`, and uses
 `decide` / `decision` / `release` around a message. Its tests compare whole coloured messages byte for byte, and
-some patch `termtint._tint` (`_CHOSEN`, `colours_on`): **a change here is a change to enforced**, so run enforced's
-pytest and simulation too (`~/venvs/python_validate_3.14` and `_3.13` have termtint installed editable from here).
+some patch `clitint._tint` (`_CHOSEN`, `colours_on`): **a change here is a change to enforced**, so run enforced's
+pytest and simulation too (`~/venvs/python_validate_3.14` and `_3.13` have clitint installed editable from here).
 
 What differs from enforced's copy:
-- The off switch is `TERMTINT_COLOURS_OFF=1` (enforced: `ENFORCED_COLOURS_OFF`). `NO_COLOR`, `ANSI_COLORS_DISABLED`,
+- The off switch is `CLITINT_COLOURS_OFF=1` (enforced: `ENFORCED_COLOURS_OFF`). `NO_COLOR`, `ANSI_COLORS_DISABLED`,
   `FORCE_COLOR`, `TERM=dumb` are the same.
 - More styles: enforced has only those its messages use (bold and seven colours). Here also `dim`, `italic`,
-  `underline`, `black`, `white`, `grey`, and backgrounds `on_<colour>`. Two colours or two backgrounds in a spec are
+  `underline`, `black`, `white`, `grey`, and backgrounds `highlight_<colour>`. Two colours or two backgrounds in a spec are
   a `ValueError`.
 - `let_the_environment_decide()` undoes `turn_colours_off` / `turn_colours_on`.
 - For a library built on it: `add_off_switch(name)` (its own `NAME=1`), and `decide()` / `decision()` / `release()`,
@@ -24,9 +24,9 @@ What differs from enforced's copy:
 ## Commands
 
 ```bash
-~/venvs/termtint/bin/python -m pytest -q          # 3.14; ~/venvs/termtint_3.13 for 3.13. Both must pass
-~/venvs/termtint/bin/python -m mypy --strict termtint
-~/venvs/termtint/bin/python -m build              # wheel + sdist
+~/venvs/clitint/bin/python -m pytest -q          # 3.14; ~/venvs/clitint_3.13 for 3.13. Both must pass
+~/venvs/clitint/bin/python -m mypy --strict clitint
+~/venvs/clitint/bin/python -m build              # wheel + sdist
 pip install -e ".[dev]" --config-settings editable_mode=compat   # to make a venv again (compat: mypy sees it)
 ```
 
@@ -36,8 +36,8 @@ project out as cfgcast was (`/mnt/d/dev/cfgcast`).
 ## Layout
 
 ```
-termtint/__init__.py   the public names, __version__ (pyproject reads it)
-termtint/_tint.py      everything: the style tables, colours_on, formatter, escapes, one_decision, strip_colours
+clitint/__init__.py   the public names, __version__ (pyproject reads it)
+clitint/_tint.py      everything: the style tables, colours_on, formatter, escapes, one_decision, strip_colours
 tests/test_tint.py     one file: specs, stripping, one decision, when text is coloured
 ```
 

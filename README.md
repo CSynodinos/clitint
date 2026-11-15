@@ -1,30 +1,33 @@
-# termtint
+# clitint
 
 Coloured terminal text for Python 3.13+, with no dependencies. Text is coloured only when someone is reading it
 on a terminal: redirect the output to a file, a pipe or a CI log and it comes out plain.
 
 ```python
-from termtint import formatter
+from clitint import formatter
 
 print(formatter("error:", "bold_red"), "file not found")
-print(formatter("warning", "underline_black_on_yellow"))
+print(formatter("warning", "underline_black_highlight_yellow"))
 ```
 
 ## Install
 
 ```bash
-pip install termtint
+pip install clitint
 ```
 
 ## Specs
 
-A spec is a set of styles joined by `_`, in any order: `"red"`, `"bold_red"`, `"red_bold"`, `"italic_white_on_blue"`.
+A spec is a set of styles joined by `_`, in any order: `"red"`, `"bold_red"`, `"red_bold"`, `"italic_white_highlight_blue"`.
 
 | Kind | Names |
 |---|---|
 | Attributes | `bold`, `dim`, `italic`, `underline` |
 | Colours | `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `grey`, `orange` |
-| Backgrounds | `on_` followed by a colour: `on_blue` |
+| Backgrounds | `highlight_` followed by a colour: `highlight_blue` |
+
+
+You can also combine: bold_highlight_blue, italic_red, underline_green, etc.
 
 An unknown name, two colours or two backgrounds raise a `ValueError` that names the problem. `formatter` takes any
 object and writes its `str`. Each spec is worked out once and remembered.
@@ -34,7 +37,7 @@ object and writes its `str`. Each spec is worked out once and remembered.
 `formatter` decides at every call, in this order:
 
 1. what the program chose: `turn_colours_off()` or `turn_colours_on()` (`let_the_environment_decide()` undoes it);
-2. `TERMTINT_COLOURS_OFF=1`, `NO_COLOR` or `ANSI_COLORS_DISABLED`: plain;
+2. `CLITINT_COLOURS_OFF=1`, `NO_COLOR` or `ANSI_COLORS_DISABLED`: plain;
 3. `FORCE_COLOR`: coloured;
 4. `TERM=dumb`: plain;
 5. otherwise, coloured only when **both** stdout and stderr are terminals.
@@ -48,7 +51,7 @@ in the log.
 ## Other tools
 
 ```python
-from termtint import strip_colours, escapes, one_decision, coloured
+from clitint import strip_colours, escapes, one_decision, coloured
 
 strip_colours(formatter("x", "red"))        # 'x': every ANSI style sequence removed (for tests and logs)
 
