@@ -9,9 +9,6 @@
 ![Typed](https://img.shields.io/badge/mypy-strict-informational)
 ![Licence](https://img.shields.io/badge/licence-MIT-lightgrey)
 
-<img src="https://raw.githubusercontent.com/CSynodinos/clitint/main/docs/example.svg" alt="clitint printing a bold red 'error:' and an underlined black-on-yellow 'warning' in a terminal, and plain text when redirected to a file" width="640">
-
-</div>
 
 Text is coloured only when someone is reading it on a terminal: redirect the output to a file, a pipe or a CI log
 and it comes out plain.
@@ -19,16 +16,24 @@ and it comes out plain.
 ```python
 from clitint import formatter
 
-print(formatter("error:", "bold_red"), "file not found")
-print(formatter("warning", "underline_black_highlight_yellow"))
+text_1 = formatter("error:", "bold_red")
+text_2 = formatter("warning", "underline_black_highlight_yellow")
+print(text_1, "file not found")
+print(text_2)
 ```
+
+</div>
+<img src="https://raw.githubusercontent.com/CSynodinos/clitint/main/docs/example.svg" alt="clitint printing a bold red 'error:' and an underlined black-on-yellow 'warning' in a terminal, and plain text when redirected to a file" width="640">
+
+</div>
+
 
 It is made for libraries and tools that build messages: one call with a short spec, an answer that follows the
 environment as it is now, and colours only when **both** stdout and stderr are terminals, so an error message that
 ends up in a log has no escape codes in it.
 
 > [!NOTE]
-> For 256 colours, RGB or themes, use a bigger library.
+> For 256 colours, RGB or themes, use another library.
 
 ## 📦 Install
 
