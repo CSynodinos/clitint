@@ -72,7 +72,7 @@ publish.sh, env.sh    upload to (Test)PyPI; the venv. tokens (git-ignored) is th
   place is seen, and asked as a mapping). `_ENV` is None where there is no such dictionary. A CPython detail, accepted.
   clitint's own off switch is tested on its own (`_K_OFF`); only `add_off_switch` names go through a loop (`_K_MORE`).
 - Whether the streams are terminals is remembered until `sys.stdout` or `sys.stderr` is replaced (`_streams`).
-- The check reads the environment at every call (95 ns with colours forced, 43 with `NO_COLOR`, against termcolor's
+- The check reads the environment at every call (92 ns with colours forced, 38 with `NO_COLOR` in compare.py, against termcolor's
   12 and TermTint's 64, which keep their first answer): that is what lets it see `NO_COLOR` set while a program runs,
   and `one_decision` is how a batch pays it once. Don't cache it.
   Trimmed on 2026-11-15, each step timed first (the owner: "only implement if worth it"). Kept: the identity test
