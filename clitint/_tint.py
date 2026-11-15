@@ -1,7 +1,14 @@
-from typing import Any
-import re
+from __future__ import annotations
 import os
 import sys
+
+#* Neither ``typing`` nor ``re`` is imported at run time: ``typing`` (``re`` with it) was 3.4 ms of a
+#* 4.1 ms start, for one ``Any``. Annotations are text (the future import); ``re`` is imported by
+#* ``strip_colours``, the one function that needs it, at its first call.
+TYPE_CHECKING = False
+if TYPE_CHECKING:
+    import re
+    from typing import Any
 
 
 #* The variables that decide whether text is coloured (see ``colours_on``), in the order they are asked.
@@ -59,14 +66,14 @@ def add_off_switch(name: str) -> None:
     that offers its users a variable of its own (``add_off_switch("MYLIB_COLOURS_OFF")``). Only
     the value ``"1"`` counts. Asked with the other off switches, before ``FORCE_COLOR``.
     """
-    global _OFF, _K_OFFS
+    global _OFF, _K_MORE
     if not isinstance(name, str) or not name:
         raise TypeError(f"an off switch is the name of an environment variable, not {name!r}")
     if name in _OFF:
         return
     _OFF = (*_OFF, name)
-    if _FAST:
-        _K_OFFS = (*_K_OFFS, _encode_key(name))
+    if _ENV is not None:
+        _K_MORE = (*_K_MORE, _encode_key(name))
 
 
 def colours_on() -> bool:
@@ -89,9 +96,10 @@ def colours_on() -> bool:
     if _CHOSEN is not None:                             # turn_colours_off / turn_colours_on: the program has said
         return _CHOSEN
     env = os.environ
-    #* Read from ``os.environ`` as it is now: a program may have put another mapping in its place.
-    data = getattr(env, "_data", None) if _FAST else None
-    if type(data) is not dict:
+    #* ``os.environ`` as it is now: a program may have put another mapping in its place. The one
+    #* found at import keeps the same dictionary for good, so an identity test is enough (``getattr``
+    #* and a type test each time cost 18 ns of 110).
+    if env is not _ENV:
         if env.get(NO_COLOR) or ANSI_COLORS_DISABLED in env:
             return False
         for name in _OFF:
@@ -102,11 +110,16 @@ def colours_on() -> bool:
         if env.get(TERM) == "dumb":
             return False
         return _both_terminals()
+    data = _DATA
     if data.get(_K_NO_COLOR) or _K_ANSI in data:      # an empty value is no value (b"" is falsy)
         return False
-    for key in _K_OFFS:
-        if data.get(key) == _V_ONE:
-            return False
+    #* clitint's own off switch alone, without a loop (12 ns); those of ``add_off_switch`` after it.
+    if data.get(_K_OFF) == _V_ONE:
+        return False
+    if _K_MORE:
+        for key in _K_MORE:
+            if data.get(key) == _V_ONE:
+                return False
     if data.get(_K_FORCE):                             #* the console asked once (Windows): no call after that
         return _CONSOLE is not None or _console_ready(True)
     if data.get(_K_TERM) == _V_DUMB:
@@ -119,20 +132,24 @@ def colours_on() -> bool:
 #* values encoded once, the way ``os.environ`` does it on this platform. It is the same data:
 #* what ``os.environ`` is given lands there. Where a Python has no such dictionary (it is a
 #* CPython detail), ``os.environ`` is asked as usual.
-#* The variables that switch colours off with the value "1": clitint's own, then each ``add_off_switch``.
+#* The variables that switch colours off with the value "1": clitint's own, then each ``add_off_switch``
+#* (``_K_OFF`` and ``_K_MORE`` encoded).
 _OFF: tuple[str, ...] = (COLOURS_OFF,)
-_K_OFFS: tuple[Any, ...] = ()
-_FAST = False
+_K_MORE: tuple[Any, ...] = ()
+#* The ``os.environ`` whose dictionary (``_DATA``) is read directly, or None: ask ``os.environ`` itself.
+_ENV: Any = None
+_DATA: dict[Any, Any] = {}
 try:
     _encode_key, _encode_value = os.environ.encodekey, os.environ.encodevalue
-    _K_OFFS = (_encode_key(COLOURS_OFF),)
+    _K_OFF = _encode_key(COLOURS_OFF)
     _K_NO_COLOR, _K_ANSI, _K_FORCE, _K_TERM = (
         _encode_key(name) for name in (NO_COLOR, ANSI_COLORS_DISABLED, FORCE_COLOR, TERM)
         )
     _V_ONE, _V_DUMB = _encode_value("1"), _encode_value("dumb")
-    _FAST = type(os.environ._data) is dict                                          # type: ignore[attr-defined]
+    if type(os.environ._data) is dict:                                              # type: ignore[attr-defined]
+        _ENV, _DATA = os.environ, os.environ._data                                  # type: ignore[attr-defined]
 except Exception:
-    _FAST = False
+    _ENV = None
 
 
 #* (sys.stdout, sys.stderr, whether both are terminals): asked again only when a stream was replaced.
@@ -329,7 +346,7 @@ def formatter(text: Any, spec: str) -> str:
     escapes = _ESCAPES.get(spec)
     if escapes is None:
         escapes = _ESCAPES[spec] = _escapes(spec)
-    return escapes[0] + str(text) + escapes[1]
+    return f"{escapes[0]}{str(text)}{escapes[1]}"         #* one string made: ``a + t + b`` copied a long text twice
 
 
 def escapes(*specs: str) -> tuple[str, ...]:
@@ -342,9 +359,14 @@ def escapes(*specs: str) -> tuple[str, ...]:
     return tuple([part for spec in specs for part in _escapes(spec)])
 
 
-_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+#* The pattern of a colour code, compiled at the first ``strip_colours``.
+_ANSI: re.Pattern[str] | None = None
 
 
 def strip_colours(text: str) -> str:
     """``text`` without its colours: every ANSI style sequence taken out, the words left as they are."""
+    global _ANSI
+    if _ANSI is None:
+        import re
+        _ANSI = re.compile(r"\x1b\[[0-9;]*m")
     return _ANSI.sub("", text)

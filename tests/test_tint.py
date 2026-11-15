@@ -243,7 +243,7 @@ def test_the_environment_is_read_as_it_is_now(monkeypatch):
     for name in ("CLITINT_COLOURS_OFF", "NO_COLOR", "ANSI_COLORS_DISABLED", "FORCE_COLOR", "TERM"):
         monkeypatch.delenv(name, raising = False)
     monkeypatch.setattr(tint, "_both_terminals", lambda: True)
-    assert tint._FAST and tint.colours_on()
+    assert tint._ENV is os.environ and tint.colours_on()
     steps = [("TERM", "dumb", False), ("FORCE_COLOR", "1", True), ("ANSI_COLORS_DISABLED", "", False)]
     for name, value, expected in steps:
         os.environ[name] = value
@@ -258,7 +258,7 @@ def test_the_environment_is_read_as_it_is_now(monkeypatch):
     assert not tint.colours_on()
     monkeypatch.setattr(os, "environ", {"TERM": "xterm"})
     assert tint.colours_on()
-    monkeypatch.setattr(tint, "_FAST", False)                       # a Python without that dictionary: the same answers
+    monkeypatch.setattr(tint, "_ENV", None)                         # a Python without that dictionary: the same answers
     assert tint.colours_on()
     monkeypatch.setattr(os, "environ", {"TERM": "dumb"})
     assert not tint.colours_on()
@@ -280,8 +280,8 @@ def test_a_child_process_is_plain_when_piped_and_coloured_when_forced():
 @pytest.mark.parametrize("fast", [True, False])
 def test_an_off_switch_of_a_library_s_own(monkeypatch, fast):
     monkeypatch.setattr(tint, "_OFF", tint._OFF)
-    monkeypatch.setattr(tint, "_K_OFFS", tint._K_OFFS)
-    monkeypatch.setattr(tint, "_FAST", fast and tint._FAST)
+    monkeypatch.setattr(tint, "_K_MORE", tint._K_MORE)
+    monkeypatch.setattr(tint, "_ENV", tint._ENV if fast else None)
     clitint.add_off_switch("MYLIB_COLOURS_OFF")
     clitint.add_off_switch("MYLIB_COLOURS_OFF")                    # twice is once
     assert tint._OFF == ("CLITINT_COLOURS_OFF", "MYLIB_COLOURS_OFF")
@@ -325,7 +325,7 @@ def test_one_decision_inside_another_keeps_the_outer_answer(monkeypatch):
 @pytest.mark.parametrize("fast", [True, False])
 def test_an_empty_no_color_or_force_color_says_nothing(monkeypatch, fast):
     #* no-color.org and force-color.org: "present and not an empty string". FORCE_COLOR=0 forces too.
-    monkeypatch.setattr(tint, "_FAST", fast and tint._FAST)
+    monkeypatch.setattr(tint, "_ENV", tint._ENV if fast else None)
     _streams(monkeypatch, False, False)
     monkeypatch.setenv("NO_COLOR", "")
     monkeypatch.setenv("FORCE_COLOR", "1")
@@ -398,3 +398,10 @@ def test_a_console_that_refuses_or_no_console_at_all_means_plain_text(monkeypatc
 
 def test_elsewhere_the_console_is_never_asked():
     assert sys.platform == "win32" or (tint._CONSOLE is True and tint._enable_windows_sequences() is True)
+
+
+def test_importing_loads_neither_typing_nor_re():
+    #* They were 3.4 ms of a 4.1 ms start (2026-11-15): annotations are text, re comes with strip_colours.
+    code = "import sys; import clitint; print(sorted(m for m in ('typing', 're') if m in sys.modules))"
+    done = subprocess.run([sys.executable, "-I", "-c", code], capture_output = True, text = True)
+    assert done.stdout.strip() == "[]", done.stdout + done.stderr
