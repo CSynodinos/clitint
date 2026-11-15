@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [{ name = "Christos Synodinos" }]
 dependencies = []
 keywords = ["terminal", "colour", "color", "ansi", "cli"]
 classifiers = [
@@ -23,6 +24,12 @@ classifiers = [
     "Topic :: Terminals",
     "Typing :: Typed",
 ]
+
+[project.urls]
+Homepage = "https://github.com/CSynodinos/clitint"
+Repository = "https://github.com/CSynodinos/clitint"
+Issues = "https://github.com/CSynodinos/clitint/issues"
+Changelog = "https://github.com/CSynodinos/clitint/releases"
 
 [project.optional-dependencies]
 dev = ["pytest", "mypy", "build", "twine"]
