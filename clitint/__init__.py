@@ -16,7 +16,7 @@ from ._tint import (
     ATTRIBUTES,
     COLOURS,
     BACKGROUNDS,
-    RESET,
+    ESC,
     )
 
 __version__ = "0.1.3"
@@ -38,5 +38,5 @@ __all__ = [
     "ATTRIBUTES",
     "COLOURS",
     "BACKGROUNDS",
-    "RESET",
+    "ESC",
     ]
