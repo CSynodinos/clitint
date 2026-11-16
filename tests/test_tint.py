@@ -301,6 +301,78 @@ def test_an_off_switch_is_a_name(name):
         clitint.add_off_switch(name)
 
 
+def test_create_colour_adds_a_name_for_specs_and_backgrounds(monkeypatch):
+    monkeypatch.setattr(tint, "COLOURS", dict(tint.COLOURS))
+    monkeypatch.setattr(tint, "BACKGROUNDS", dict(tint.BACKGROUNDS))
+    assert clitint.create_colour("steel", 70, 130, 180) == "steel"
+    assert formatter("x", "steel") == "\x1b[38;2;70;130;180mx\x1b[0m"
+    assert formatter("x", "bold_steel") == "\x1b[1m\x1b[38;2;70;130;180mx\x1b[0m"
+    assert formatter("x", "white_highlight_steel") == "\x1b[37m\x1b[48;2;70;130;180mx\x1b[0m"
+    assert escapes("steel") == ("\x1b[38;2;70;130;180m", "\x1b[0m")
+    with pytest.raises(ValueError, match = "two colours"):
+        formatter("x", "red_steel")
+    monkeypatch.setitem(tint._ESCAPES, "steel", ("", ""))      # the cache is per spec: nothing stale was kept
+    assert clitint.create_colour("ink", 0, 0, 0) == "ink" and formatter("x", "ink") == "\x1b[38;2;0;0;0mx\x1b[0m"
+
+
+@pytest.mark.parametrize("name, why", [
+    ("", "without '_'"), ("steel_blue", "without '_'"), ("red", "already a style"), ("bold", "already a style"),
+    ("highlight", "already a style"), ("orange", "already a style"),
+    ])
+def test_create_colour_refuses_a_bad_name(name, why, monkeypatch):
+    monkeypatch.setattr(tint, "COLOURS", dict(tint.COLOURS))
+    with pytest.raises(ValueError, match = why):
+        clitint.create_colour(name, 1, 2, 3)
+    assert name not in tint.COLOURS or name in CODES                  # nothing was added
+
+
+@pytest.mark.parametrize("rgb", [(256, 0, 0), (0, -1, 0), (0, 0, 999)])
+def test_create_colour_refuses_a_component_out_of_range(rgb, monkeypatch):
+    monkeypatch.setattr(tint, "COLOURS", dict(tint.COLOURS))
+    with pytest.raises(ValueError, match = "0 to 255"):
+        clitint.create_colour("steel", *rgb)
+    assert "steel" not in tint.COLOURS
+
+
+@pytest.mark.parametrize("bad", [(None, 1, 2, 3), (5, 1, 2, 3), ("steel", 1.0, 2, 3), ("steel", 1, "2", 3), ("steel", True, 2, 3)])
+def test_create_colour_refuses_a_wrong_type(bad, monkeypatch):
+    monkeypatch.setattr(tint, "COLOURS", dict(tint.COLOURS))
+    with pytest.raises(TypeError):
+        clitint.create_colour(*bad)
+    assert "steel" not in tint.COLOURS
+
+
+def test_create_multiple_colours_adds_each_and_returns_the_names_in_order(monkeypatch):
+    monkeypatch.setattr(tint, "COLOURS", dict(tint.COLOURS))
+    monkeypatch.setattr(tint, "BACKGROUNDS", dict(tint.BACKGROUNDS))
+    assert clitint.create_multiple_colours({"steel": (70, 130, 180), "sand": (194, 178, 128)}) == ("steel", "sand")
+    assert formatter("x", "steel_highlight_sand") == "\x1b[38;2;70;130;180m\x1b[48;2;194;178;128mx\x1b[0m"
+    assert clitint.create_multiple_colours({}) == ()
+
+
+@pytest.mark.parametrize("third", [
+    ("red", (1, 2, 3)), ("ink_blue", (1, 2, 3)), ("ink", (1, 2, 300)), ("ink", (1, 2)), ("ink", [1, 2, 3]),
+    ("ink", (1, 2, "3")),
+    ])
+def test_create_multiple_colours_is_all_or_none(third, monkeypatch):
+    monkeypatch.setattr(tint, "COLOURS", dict(tint.COLOURS))
+    monkeypatch.setattr(tint, "BACKGROUNDS", dict(tint.BACKGROUNDS))
+    colours_before, backgrounds_before = dict(tint.COLOURS), dict(tint.BACKGROUNDS)
+    with pytest.raises((TypeError, ValueError)):
+        clitint.create_multiple_colours({"steel": (70, 130, 180), "sand": (194, 178, 128), third[0]: third[1]})
+    assert tint.COLOURS == colours_before and tint.BACKGROUNDS == backgrounds_before
+    assert clitint.create_multiple_colours({"steel": (70, 130, 180)}) == ("steel",)    # the names are free again
+
+
+def test_create_colour_matches_termcolor_s_rgb():
+    termcolor = pytest.importorskip("termcolor")
+    try:
+        name = clitint.create_colour("sand", 194, 178, 128)
+        assert formatter("x", name) == termcolor.colored("x", (194, 178, 128), force_color = True)
+    finally:
+        tint.COLOURS.pop("sand", None); tint.BACKGROUNDS.pop("sand", None); tint._ESCAPES.pop("sand", None)
+
+
 def test_decide_keeps_the_answer_until_release(monkeypatch):
     assert clitint.decision() is None
     assert clitint.decide() is True

@@ -138,6 +138,78 @@ def add_off_switch(name: str) -> None:
     return
 
 
+def create_colour(name: str, red: int, green: int, blue: int) -> str:
+    """
+    Add an RGB colour under `name` to `COLOURS` and `BACKGROUNDS`, and return `name`: from
+    then on it goes in a spec as any colour does, alone or as `highlight_<name>`.
+
+    The colour is a 24-bit sequence (`38;2;r;g;b`), shown as such on most terminals of today
+    (Windows Terminal, the Windows 10 and 11 console, iTerm2, GNOME Terminal, VS Code, tmux 3);
+    an older one shows the text in its default colour. The named colours up to `grey` work
+    everywhere. clitint does not check what the terminal can do.
+
+    Args:
+        name (str): The name to use in specs: letters and digits, no `_` (specs are split on it),
+            and not a name already taken.
+        red, green, blue (int): 0 to 255.
+
+    Raises:
+        TypeError: `name` is not a string, or a component is not an int (`bool` included).
+        ValueError: `name` is empty, has a `_`, is already a style, or a component is out of range.
+
+    Example:
+        >>> steel = create_colour("steel", 70, 130, 180)
+        >>> formatter("x", f"bold_{steel}")
+        '\\x1b[1m\\x1b[38;2;70;130;180mx\\x1b[0m'
+    """
+    if not isinstance(name, str):
+        raise TypeError(f"a colour name is a string, not {name!r}")
+    if not name or "_" in name:
+        raise ValueError(f"a colour name is a word without '_', not {name!r}")
+    if name in ATTRIBUTES or name in COLOURS or name == "highlight":
+        raise ValueError(f"{name!r} is already a style")
+    for component in (red, green, blue):
+        if not isinstance(component, int) or isinstance(component, bool):
+            raise TypeError(f"a colour component is an int, not {component!r}")
+        if not 0 <= component <= 255:
+            raise ValueError(f"a colour component is 0 to 255, not {component}")
+    COLOURS[name] = f"\x1b[38;2;{red};{green};{blue}m"
+    BACKGROUNDS[name] = f"\x1b[48;2;{red};{green};{blue}m"
+    return name
+
+
+def create_multiple_colours(colours: dict[str, tuple[int, int, int]]) -> tuple[str, ...]:
+    """
+    `create_colour` for each `name: (red, green, blue)` of `colours`, all or none: where one is
+    refused, those added before it are taken out again and the error is raised.
+
+    Args:
+        colours (dict[str, tuple[int, int, int]]): The names, each with its three components.
+
+    Returns:
+        tuple[str, ...]: The names, in the order given.
+
+    Raises:
+        TypeError, ValueError: As `create_colour`; also `TypeError` where a value is not three components.
+
+    Example:
+        >>> steel, sand = create_multiple_colours({"steel": (70, 130, 180), "sand": (194, 178, 128)})
+        >>> formatter("x", f"{steel}_highlight_{sand}")
+        '\\x1b[38;2;70;130;180m\\x1b[48;2;194;178;128mx\\x1b[0m'
+    """
+    added: list[str] = []
+    try:
+        for name, rgb in colours.items():
+            if not isinstance(rgb, tuple) or len(rgb) != 3:
+                raise TypeError(f"a colour is three components (red, green, blue), not {rgb!r}")
+            added.append(create_colour(name, *rgb))
+    except BaseException:
+        for name in added:
+            del COLOURS[name], BACKGROUNDS[name]
+        raise
+    return tuple(added)
+
+
 def colours_on() -> bool:
     """
     Whether coloured text is enabled right now. The first rule that applies decides:

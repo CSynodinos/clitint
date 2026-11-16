@@ -17,8 +17,9 @@ What differs from enforced's copy:
   2026-11-15). On Windows the console is switched to read escape sequences (`_console_ready`, `_enable_sequences`,
   once, both streams); where it refuses, plain unless forced. Tried with a stand-in kernel32: no Windows machine here.
 - More styles: enforced has only those its messages use (bold and seven colours). Here also `dim`, `italic`,
-  `underline`, `black`, `white`, `grey`, and backgrounds `highlight_<colour>`. Two colours or two backgrounds in a spec are
-  a `ValueError`.
+  `underline`, `black`, `white`, `grey`, eleven 24-bit colours (`orange` ... `lime`), backgrounds `highlight_<colour>`,
+  and `create_colour(name, r, g, b)` (a 24-bit colour under a new name, in `COLOURS` and `BACKGROUNDS`; returns the
+  name), `create_multiple_colours({name: (r, g, b)})` (all or none). Two colours or two backgrounds in a spec are a `ValueError`. No check for 24-bit support (none is reliable).
 - `let_the_environment_decide()` undoes `turn_colours_off` / `turn_colours_on`.
 - For a library built on it: `add_off_switch(name)` (its own `NAME=1`), and `decide()` / `decision()` / `release()`,
   the fast form of `one_decision` (which nests: an inner one keeps the outer answer).

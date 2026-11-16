@@ -35,7 +35,7 @@ environment as it is now, and colours only when **both** stdout and stderr are t
 ends up in a log has no escape codes in it.
 
 > [!NOTE]
-> For 256 colours or themes, use another library.
+> For 256-colour palettes or themes, use another library.
 
 ## 📦 Install
 
@@ -60,6 +60,35 @@ Combine as many attributes as you like with at most one colour and one backgroun
 - An unknown name, two colours or two backgrounds raise a `ValueError` that names the problem.
 - `formatter` takes any object and writes its `str`.
 - Each spec is worked out once and remembered.
+
+### Your own colours
+
+`create_colour` adds an RGB colour under a name of your choice, and returns that name. From then on it goes in a
+spec as any colour does, alone or as `highlight_<name>`:
+
+```python
+from clitint import create_colour, formatter
+
+steel = create_colour("steel", 70, 130, 180)
+print(formatter("ok", f"bold_{steel}"), formatter("ok", f"white_highlight_{steel}"))
+```
+
+A name is one word without `_`, not already a style; each component is an int from 0 to 255.
+
+`create_multiple_colours` makes several at once and returns their names in order. It is all or nothing: if one
+is refused, none are added.
+
+```python
+from clitint import create_multiple_colours
+
+steel, sand = create_multiple_colours({"steel": (70, 130, 180), "sand": (194, 178, 128)})
+```
+
+> [!WARNING]
+> `orange` and the colours after it in the table, and every colour made with `create_colour`, are 24-bit
+> sequences. Most terminals of today show them (Windows Terminal, the Windows 10 and 11 console, iTerm2, GNOME
+> Terminal, VS Code, tmux 3); an older one shows the text in its default colour. clitint doesn't check what the
+> terminal can do: `black` to `grey` work everywhere.
 
 ## 🖥️ When text is coloured
 
