@@ -35,7 +35,7 @@ environment as it is now, and colours only when **both** stdout and stderr are t
 ends up in a log has no escape codes in it.
 
 > [!NOTE]
-> For 256 colours, RGB or themes, use another library.
+> For 256 colours or themes, use another library.
 
 ## 📦 Install
 
@@ -51,7 +51,7 @@ A spec is a set of styles joined by `_`, in any order: `"red"`, `"bold_red"`, `"
 | Kind        | Names                                                                                    |
 |-------------|------------------------------------------------------------------------------------------|
 | Attributes  | `bold` `dim` `italic` `underline`                                                        |
-| Colours     | `black` `red` `green` `yellow` `blue` `magenta` `cyan` `white` `grey` `orange`           |
+| Colours     | `black` `red` `green` `yellow` `blue` `magenta` `cyan` `white` `grey` `orange` `pink` `purple` `brown` `teal` `gold` `maroon` `navy` `olive` `coral` `lime` |
 | Backgrounds | `highlight_` followed by a colour, e.g. `highlight_blue`                                 |
 
 Combine as many attributes as you like with at most one colour and one background: `bold_highlight_blue`,
