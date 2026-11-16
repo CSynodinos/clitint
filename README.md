@@ -28,7 +28,7 @@ print(formatter("done", f"bold_{hot_pink}"), formatter("ok", f"black_highlight_{
 ```
 
 </div>
-<img src="https://raw.githubusercontent.com/CSynodinos/clitint/main/docs/example.svg" alt="clitint printing a bold red 'error:', an underlined black-on-yellow 'warning', and 'done' in bold hot pink next to 'ok' on a hot pink background in a terminal, and plain text when redirected to a file" width="640">
+<img src="docs/example.svg" alt="clitint printing a bold red 'error:', an underlined black-on-yellow 'warning', and 'done' in bold hot pink next to 'ok' on a hot pink background in a terminal, and plain text when redirected to a file" width="640">
 
 </div>
 
@@ -37,8 +37,6 @@ It is made for libraries and tools that build messages: one call with a short sp
 environment as it is now, and colours only when **both** stdout and stderr are terminals, so an error message that
 ends up in a log has no escape codes in it.
 
-> [!NOTE]
-> For 256-colour palettes or themes, use another library.
 
 ## 📦 Install
 
