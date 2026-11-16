@@ -19,7 +19,7 @@ from ._tint import (
     ESC,
     )
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 __all__ = [
     "formatter",
