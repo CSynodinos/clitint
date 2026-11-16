@@ -35,7 +35,7 @@ environment as it is now, and colours only when **both** stdout and stderr are t
 ends up in a log has no escape codes in it.
 
 > [!NOTE]
-> For 256 colours, RGB or themes, use another library.
+> For 256 colours or themes, use another library.
 
 ## 📦 Install
 
@@ -51,7 +51,7 @@ A spec is a set of styles joined by `_`, in any order: `"red"`, `"bold_red"`, `"
 | Kind        | Names                                                                                    |
 |-------------|------------------------------------------------------------------------------------------|
 | Attributes  | `bold` `dim` `italic` `underline`                                                        |
-| Colours     | `black` `red` `green` `yellow` `blue` `magenta` `cyan` `white` `grey` `orange`           |
+| Colours     | `black` `red` `green` `yellow` `blue` `magenta` `cyan` `white` `grey` `orange` `pink` `purple` `brown` `teal` `gold` `maroon` `navy` `olive` `coral` `lime` |
 | Backgrounds | `highlight_` followed by a colour, e.g. `highlight_blue`                                 |
 
 Combine as many attributes as you like with at most one colour and one background: `bold_highlight_blue`,
@@ -86,17 +86,78 @@ On Windows 10 and 11 the console is asked to read escape sequences; where it can
 
 ## 🧰 Other tools
 
+### Switching colours from the program
+
 ```python
-from clitint import strip_colours, escapes, one_decision, coloured
+from clitint import turn_colours_off, turn_colours_on, let_the_environment_decide, colours_on
 
-strip_colours(formatter("x", "red"))        # 'x': every ANSI style sequence removed (for tests and logs)
+turn_colours_off()              # plain from now on, whatever the environment says (a --no-color flag)
+turn_colours_on()               # coloured from now on, even into a file or a pipe (a --color flag)
+let_the_environment_decide()    # back to the rules above
+colours_on()                    # the answer right now: True or False
+```
 
-with one_decision():                        # one message: decide once, not at every formatter call
-    line = formatter("a", "red") + " " + formatter("b", "blue")
+### Building one message: decide once
 
-red, reset = escapes("red")                 # the raw sequences, for a hot f-string
+Every `formatter` call checks the environment and the streams. That is the only performance bottleneck this library has. It is insignificant for most use cases. However, when a message is built from many pieces (hunderds or thousands of calls to formatter), that can slowdown the process noticeably. Using `one_decision` avoids repeated checks and improves performance in such cases many times over.
+
+```python
+from clitint import formatter, one_decision
+
+with one_decision():
+    line = formatter("a", "red") + " " + formatter("b", "blue") + " " + formatter("c", "green") + ...
+```
+
+Blocks can be nested, and an inner one keeps the outer answer. Something that changes the answer inside the
+block, such as `turn_colours_off()`, takes effect only after the block ends. The answer lives in a module global,
+so don't build messages in several threads at once.
+
+`decide()`, `decision()` and `release()` do the same without a `with` block, for a library that wraps its own
+message building:
+
+```python
+from clitint import decide, decision, release
+
+decide()        # check now and keep the answer (returns it)
+decision()      # the answer kept, or None if nothing is decided
+release()       # forget it: each formatter call checks again
+```
+
+### Raw escape sequences, for hot loops
+
+`escapes` gives the sequences that go before and after the text, two per spec, in one flat tuple. They are the
+same whether colours are on or not, so check `coloured()` yourself. It returns the answer kept by
+`one_decision` / `decide` if there is one, and `colours_on()` otherwise:
+
+```python
+from clitint import escapes, coloured
+
+red, reset, bold, bold_reset = escapes("red", "bold")
 text = f"{red}x{reset}" if coloured() else "x"
 ```
+
+`ATTRIBUTES`, `COLOURS` and `BACKGROUNDS` are the tables of names and their sequences, and `ESC` is the reset
+sequence (`"\x1b[0m"`).
+
+### Removing colours
+
+```python
+from clitint import strip_colours
+
+strip_colours(formatter("x", "red"))   # 'x': every ANSI style sequence removed (for tests and logs)
+```
+
+### For a library built on clitint
+
+Give your users an off switch of their own, next to `CLITINT_COLOURS_OFF`:
+
+```python
+from clitint import add_off_switch
+
+add_off_switch("MYLIB_COLOURS_OFF")    # MYLIB_COLOURS_OFF=1 now turns colours off too
+```
+
+Only the value `1` counts, and it is checked together with the other off switches, before `FORCE_COLOR`.
 
 ## 📄 Licence
 

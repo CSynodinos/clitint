@@ -22,14 +22,15 @@ def colours_wanted(monkeypatch):
 
 
 #* The escape sequences, written out here a second time: what a terminal is to be sent.
+RGB = {"orange": "255;165;0", "pink": "255;192;203", "purple": "128;0;128", "brown": "165;42;42", "teal": "0;128;128", "gold": "255;215;0", "maroon": "128;0;0", "navy": "0;0;128", "olive": "128;128;0", "coral": "255;127;80", "lime": "0;255;0"}
 CODES = {"bold": "\x1b[1m", "dim": "\x1b[2m", "italic": "\x1b[3m", "underline": "\x1b[4m",
          "black": "\x1b[30m", "red": "\x1b[31m", "green": "\x1b[32m", "yellow": "\x1b[33m", "blue": "\x1b[34m",
          "magenta": "\x1b[35m", "cyan": "\x1b[36m", "white": "\x1b[37m", "grey": "\x1b[90m",
-         "orange": "\x1b[38;2;255;165;0m"}
+         **{name: f"\x1b[38;2;{rgb}m" for name, rgb in RGB.items()}}
 BACK = {"black": "\x1b[40m", "red": "\x1b[41m", "green": "\x1b[42m", "yellow": "\x1b[43m", "blue": "\x1b[44m",
         "magenta": "\x1b[45m", "cyan": "\x1b[46m", "white": "\x1b[47m", "grey": "\x1b[100m",
-        "orange": "\x1b[48;2;255;165;0m"}
-COLOURS = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white", "grey", "orange"]
+        **{name: f"\x1b[48;2;{rgb}m" for name, rgb in RGB.items()}}
+COLOURS = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white", "grey", *RGB]
 ATTRS = ["bold", "dim", "italic", "underline"]
 
 
@@ -89,7 +90,7 @@ class TestFormatter:
 
     # --- what there is no style for ---
 
-    @pytest.mark.parametrize("spec", ["purple", "", "bold_purple", "highlight", "highlight_bold", "light_red", "teal", "red_highlight", "on_blue"])
+    @pytest.mark.parametrize("spec", ["violet", "", "bold_violet", "highlight", "highlight_bold", "light_red", "turquoise", "red_highlight", "on_blue"])
     def test_an_unknown_style_is_refused_by_name(self, spec):
         for _ in range(2):                                          # the refusal is not remembered as an answer
             with pytest.raises(ValueError, match = "unknown style"):
@@ -102,14 +103,14 @@ class TestFormatter:
 
     def test_with_colours_off_the_spec_is_not_read(self, monkeypatch):
         monkeypatch.setenv("CLITINT_COLOURS_OFF", "1")
-        assert formatter("text", "bold_red") == "text" and formatter(5, "purple") == "5"
+        assert formatter("text", "bold_red") == "text" and formatter(5, "violet") == "5"
 
 
 def test_the_sequences_are_the_ones_termcolor_writes():
     #* Where termcolor happens to be installed: text is, to the byte, what it makes.
     termcolor = pytest.importorskip("termcolor")
     for color in COLOURS:
-        name: Any = (255, 165, 0) if color == "orange" else ("light_grey" if color == "white" else color)
+        name: Any = tuple(map(int, RGB[color].split(";"))) if color in RGB else ("light_grey" if color == "white" else color)
         if color in ("grey", "white"):
             continue                                                # termcolor's names for 90 / 37 changed across versions
         assert formatter("x", color) == termcolor.colored("x", name, force_color = True)
@@ -152,7 +153,7 @@ def test_escapes_are_the_formatter_s_sequences_whatever_colours_say(monkeypatch)
     monkeypatch.setenv("CLITINT_COLOURS_OFF", "1")
     assert escapes("red") == ("\x1b[31m", "\x1b[0m")
     with pytest.raises(ValueError):
-        escapes("purple")
+        escapes("violet")
 
 
 def test_one_decision_asks_once_and_leaves_nothing_behind(monkeypatch):
@@ -242,7 +243,7 @@ def test_the_environment_is_read_as_it_is_now(monkeypatch):
     #* changed, and another mapping put in the place of os.environ is read as well.
     for name in ("CLITINT_COLOURS_OFF", "NO_COLOR", "ANSI_COLORS_DISABLED", "FORCE_COLOR", "TERM"):
         monkeypatch.delenv(name, raising = False)
-    monkeypatch.setattr(tint, "_both_terminals", lambda: True)
+    monkeypatch.setattr(tint, "_are_streams_terminals", lambda: True)
     assert tint._ENV is os.environ and tint.colours_on()
     steps = [("TERM", "dumb", False), ("FORCE_COLOR", "1", True), ("ANSI_COLORS_DISABLED", "", False)]
     for name, value, expected in steps:
@@ -376,28 +377,28 @@ class _Kernel32:
 
 def test_the_windows_console_is_switched_to_read_sequences():
     kernel = _Kernel32({-11: 0x3, -12: 0x3})
-    assert tint._enable_sequences(kernel) is True
+    assert tint._win32_sequences_compat_api(kernel) is True
     assert kernel.set == [(-11, 0x7), (-12, 0x7)]               # the mode as it was, and virtual terminal on
 
 
 def test_a_console_that_reads_them_already_is_left_alone():
     kernel = _Kernel32({-11: 0x7, -12: None})                   # stderr is no console
-    assert tint._enable_sequences(kernel) is True and kernel.set == []
+    assert tint._win32_sequences_compat_api(kernel) is True and kernel.set == []
 
 
 def test_a_console_that_refuses_or_no_console_at_all_means_plain_text(monkeypatch):
-    assert tint._enable_sequences(_Kernel32({-11: 0x3, -12: 0x3}, refuses = True)) is False
-    assert tint._enable_sequences(_Kernel32({-11: None, -12: None})) is False
-    monkeypatch.setattr(tint, "_CONSOLE", False)                # such a console, found earlier
+    assert tint._win32_sequences_compat_api(_Kernel32({-11: 0x3, -12: 0x3}, refuses = True)) is False
+    assert tint._win32_sequences_compat_api(_Kernel32({-11: None, -12: None})) is False
+    monkeypatch.setattr(tint, "_CONSOLE_SHOWS_ESCAPES", False)                # such a console, found earlier
     _streams(monkeypatch, True, True)
-    monkeypatch.setattr(tint, "_streams", (None, None, False))
+    monkeypatch.setattr(tint, "_std_streams", (None, None, False))
     assert clitint.colours_on() is False                        # terminals, but the sequences would show as text
     monkeypatch.setenv("FORCE_COLOR", "1")
     assert clitint.colours_on() is True                         # forced: the reader knows best
 
 
 def test_elsewhere_the_console_is_never_asked():
-    assert sys.platform == "win32" or (tint._CONSOLE is True and tint._enable_windows_sequences() is True)
+    assert sys.platform == "win32" or (tint._CONSOLE_SHOWS_ESCAPES is True and tint._enable_windows_sequences() is True)
 
 
 def test_importing_loads_neither_typing_nor_re():
