@@ -28,7 +28,7 @@ print(formatter("done", f"bold_{hot_pink}"), formatter("ok", f"black_highlight_{
 ```
 
 </div>
-<img src="docs/example.svg" alt="clitint printing a bold red 'error:', an underlined black-on-yellow 'warning', and 'done' in bold hot pink next to 'ok' on a hot pink background in a terminal, and plain text when redirected to a file" width="640">
+<img src="https://raw.githubusercontent.com/CSynodinos/clitint/main/docs/example.svg" alt="clitint printing a bold red 'error:', an underlined black-on-yellow 'warning', and 'done' in bold hot pink next to 'ok' on a hot pink background in a terminal, and plain text when redirected to a file" width="640">
 
 </div>
 
