@@ -6,7 +6,10 @@ import sys
 TYPE_CHECKING = False
 if TYPE_CHECKING:
     import re
+    from types import MappingProxyType
     from typing import Any
+else:
+    MappingProxyType = type(type.__dict__)          #* `types.MappingProxyType`, without importing `types`
 
 
 COLOURS_OFF = "CLITINT_COLOURS_OFF"
@@ -15,14 +18,14 @@ ANSI_COLORS_DISABLED = "ANSI_COLORS_DISABLED"
 FORCE_COLOR = "FORCE_COLOR"
 TERM = "TERM"
 
-#* Spec
-ATTRIBUTES = {
+#* Spec: the tables kept here, and read-only views of them below (`ATTRIBUTES`, `COLOURS`, `BACKGROUNDS`).
+_ATTRIBUTES = {
     "bold": "\x1b[1m",
     "dim": "\x1b[2m",
     "italic": "\x1b[3m",
     "underline": "\x1b[4m",
     }
-COLOURS = {
+_COLOURS = {
     "black": "\x1b[30m",
     "red": "\x1b[31m",
     "green": "\x1b[32m",
@@ -44,7 +47,7 @@ COLOURS = {
     "coral": "\x1b[38;2;255;127;80m",
     "lime": "\x1b[38;2;0;255;0m",
     }
-BACKGROUNDS = {
+_BACKGROUNDS = {
     "black": "\x1b[40m",
     "red": "\x1b[41m",
     "green": "\x1b[42m",
@@ -68,9 +71,17 @@ BACKGROUNDS = {
     }
 ESC = "\x1b[0m"
 
+#* What a program reads; `create_colour` is the one way in.
+ATTRIBUTES: MappingProxyType[str, str] = MappingProxyType(_ATTRIBUTES)
+COLOURS: MappingProxyType[str, str] = MappingProxyType(_COLOURS)
+BACKGROUNDS: MappingProxyType[str, str] = MappingProxyType(_BACKGROUNDS)
+
 
 #* What `turn_colours_off` or `turn_colours_on` chose, or None: the environment and the streams decide.
 _CHOSEN: bool | None = None
+
+#* While one message is built: the answer of `colours_on` for all of it (None: ask each time).
+_decided: bool | None = None
 
 
 # Optimization for environment variable lookups: avoid repeated encoding/decoding.
@@ -138,9 +149,93 @@ def add_off_switch(name: str) -> None:
     return
 
 
+def create_colour(name: str, red: int, green: int, blue: int) -> str:
+    """
+    Add an RGB colour under `name` to `COLOURS` and `BACKGROUNDS`, and return `name`: from
+    then on it goes in a spec as any colour does, alone or as `highlight_<name>`. Asking for
+    a name again with the same components does nothing, so two libraries can each create the
+    colour they need; another colour under a name already taken is refused.
+
+    The colour is a 24-bit sequence (`38;2;r;g;b`). Where the terminal does not seem to show
+    those, the text is written plain, with one `TrueColourWarning` per process (see `formatter`).
+
+    Args:
+        name (str): The name to use in specs: a word without `_` (specs are split on it), not
+            an attribute, not `highlight`, and not a colour already taken with other components.
+        red, green, blue (int): 0 to 255.
+
+    Raises:
+        TypeError: `name` is not a string, or a component is not an int (`bool` included).
+        ValueError: `name` is empty, has a `_`, is an attribute or `highlight`, is another
+            colour already, or a component is out of range.
+
+    Example:
+        >>> steel = create_colour("steel", 70, 130, 180)
+        >>> formatter("x", f"bold_{steel}")
+        '\\x1b[1m\\x1b[38;2;70;130;180mx\\x1b[0m'
+    """
+    if not isinstance(name, str):
+        raise TypeError(f"a colour name is a string, not {name!r}")
+    if not name or "_" in name:
+        raise ValueError(f"a colour name is a word without '_', not {name!r}")
+    if name in _ATTRIBUTES or name == "highlight":
+        raise ValueError(f"{name!r} is already a style")
+    for component in (red, green, blue):
+        if not isinstance(component, int) or isinstance(component, bool):
+            raise TypeError(f"a colour component is an int, not {component!r}")
+        if not 0 <= component <= 255:
+            raise ValueError(f"a colour component is 0 to 255, not {component}")
+    colour = f"\x1b[38;2;{red};{green};{blue}m"
+    if name in _COLOURS:
+        #* The same colour again: nothing to do. Another one would change specs worked out already.
+        if _COLOURS[name] == colour:
+            return name
+        raise ValueError(f"{name!r} is already a style, another colour")
+    _COLOURS[name] = colour
+    _BACKGROUNDS[name] = f"\x1b[48;2;{red};{green};{blue}m"
+    return name
+
+
+def create_multiple_colours(colours: dict[str, tuple[int, int, int]]) -> tuple[str, ...]:
+    """
+    `create_colour` for each `name: (red, green, blue)` of `colours`, all or none: where one is
+    refused, those it added before are taken out again and the error is raised (a colour
+    that was there already stays).
+
+    Args:
+        colours (dict[str, tuple[int, int, int]]): The names, each with its three components.
+
+    Returns:
+        tuple[str, ...]: The names, in the order given.
+
+    Raises:
+        TypeError, ValueError: As `create_colour`; also `TypeError` where a value is not three components.
+
+    Example:
+        >>> steel, sand = create_multiple_colours({"steel": (70, 130, 180), "sand": (194, 178, 128)})
+        >>> formatter("x", f"{steel}_highlight_{sand}")
+        '\\x1b[38;2;70;130;180m\\x1b[48;2;194;178;128mx\\x1b[0m'
+    """
+    added: list[str] = []
+    try:
+        for name, rgb in colours.items():
+            if not isinstance(rgb, tuple) or len(rgb) != 3:
+                raise TypeError(f"a colour is three components (red, green, blue), not {rgb!r}")
+            new = name not in _COLOURS
+            create_colour(name, *rgb)
+            if new:
+                added.append(name)
+    except BaseException:
+        for name in added:
+            del _COLOURS[name], _BACKGROUNDS[name]
+        raise
+    return tuple(colours)
+
+
 def colours_on() -> bool:
     """
-    Whether coloured text is enabled right now. The first rule that applies decides:
+    Whether coloured text is enabled right now. Inside `one_decision` (or between `decide()`
+    and `release()`), the answer kept there. Otherwise the first rule that applies decides:
 
         1. `turn_colours_off()` / `turn_colours_on()`, if the program called one (`let_the_environment_decide()` undoes it).
         2. Plain: `NO_COLOR` (any value but an empty one, as no-color.org has it), `ANSI_COLORS_DISABLED`,
@@ -154,13 +249,17 @@ def colours_on() -> bool:
 
     The environment is read at every call, so a change takes effect at once.
 
-    >>> python app.py
-    >>> colours_on()
-    >>> True
-    ...
-    >>> python app.py > out.txt
-    >>> colours_on()
-    >>> False
+    Example:
+        Run on a terminal, `colours_on()` is True; with `python app.py > out.txt` it is False.
+    """
+    return _colours_now() if _decided is None else _decided
+
+
+def _colours_now() -> bool:
+    """
+    The rules of `colours_on`, asked now, whatever answer is kept. `formatter`, `one_decision` and
+    `decide` call this, not `colours_on`: the kept answer is tested once, in `formatter`, not twice
+    (a second test cost 15 ns of 135). To count or fix the answers in a test, patch this one.
     """
     if _CHOSEN is not None:                           # turn_colours_off / turn_colours_on: the program has said
         return _CHOSEN
@@ -273,16 +372,13 @@ def _win32_sequences_compat_api(kernel32: Any) -> bool:
     return done
 
 
-#* While one message is built: the answer of `colours_on` for all of it (None: ask each time).
-_decided: bool | None = None
-
-
 def decide() -> bool:
     """
-    Decide whether colours should be on and keep the answer globally until `release()` is called.
+    Ask `colours_on` now, keep the answer until `release()` (each `formatter` and `colours_on`
+    gives it), and return it. A second `decide` asks again.
     """
     global _decided
-    _decided = answer = colours_on()
+    _decided = answer = _colours_now()
     return answer
 
 
@@ -299,36 +395,22 @@ def release() -> None:
 
 class one_decision:
     """
-    `Not Thread-safe`
-
-    Create context were the formatter only asks once whether the message needs colouring.
-    Very useful for speeding up the building of messages that require multiple calls to `formatter`.
+    Decide once whether colours are on, for everything built inside the block: each `formatter`
+    and `colours_on` gives that answer, without reading the environment again. `as` gives it too.
+    An inner block keeps the outer answer. Not for threads building messages at once: the answer
+    is kept in the module.
 
     Example:
+        with one_decision() as on:
+            line = formatter("Hello", "red") + " " + formatter("World", "green")
 
-    ``python
-    # This
-    with one_decision():
-        x = f"{formatter("Hello", "red")} {formatter("World", "green")} ... <hunderds of formatter()>"
+    Something that would change the answer inside the block, such as `turn_colours_off()`,
+    counts only after it:
 
-    # Is much faster than this
-    x = f"{formatter("Hello", "red")} {formatter("World", "green")} ... <hunderds of formatter()>"
-    # because each `formatter` call checks if colours are on, instead of reusing the decision made by `one_decision`.
-    ``
-
-    Gotcha:
-
-    ``python
-    with one_decision():
-        x = f"{formatter("Hello", "red")} {formatter("World", "green")}"
-        turn_colours_off()
-        x = f"{formatter("Hello", "red")} {formatter("World", "green")}"
-        print(x)    # Still colour
-    ``
-
-    In the above example, even though `turn_colours_off()` is called after first `x` creation and `x` is recalculated,
-    `turn_colours_off()` does not affect the decision because `one_decision` has already determined whether colours are on for the entire context.
-    Without `one_decision`, `print(x)` would be colourless.
+        with one_decision():
+            turn_colours_off()
+            formatter("x", "red")       # still coloured: decided at the start of the block
+        formatter("x", "red")           # 'x'
     """
     __slots__ = ("_outer",)
 
@@ -336,18 +418,13 @@ class one_decision:
         global _decided
         self._outer = _decided
         if _decided is None:
-            _decided = colours_on()
+            _decided = _colours_now()
         return _decided
 
     def __exit__(self, *_: Any) -> None:
         global _decided
         _decided = self._outer
         return
-
-
-def coloured() -> bool:
-    """Are colours on globally?"""
-    return colours_on() if _decided is None else _decided
 
 
 def _escapes(spec: str) -> tuple[str, str]:
@@ -368,32 +445,94 @@ def _escapes(spec: str) -> tuple[str, str]:
     i = 0
     while i < len(names):
         name = names[i]
-        if name == "highlight" and i + 1 < len(names) and names[i + 1] in BACKGROUNDS:
+        if name == "highlight" and i + 1 < len(names) and names[i + 1] in _BACKGROUNDS:
             if background:
                 raise ValueError(f"two backgrounds in {spec!r}")
-            background = BACKGROUNDS[names[i + 1]]
+            background = _BACKGROUNDS[names[i + 1]]
             i += 2
             continue
-        if name in ATTRIBUTES:
-            if ATTRIBUTES[name] not in attributes:
-                attributes.append(ATTRIBUTES[name])
-        elif name in COLOURS:
-            if colour and colour != COLOURS[name]:
+        if name in _ATTRIBUTES:
+            if _ATTRIBUTES[name] not in attributes:
+                attributes.append(_ATTRIBUTES[name])
+        elif name in _COLOURS:
+            if colour and colour != _COLOURS[name]:
                 raise ValueError(f"two colours in {spec!r}: name one, and 'highlight_<colour>' for a background")
-            colour = COLOURS[name]
+            colour = _COLOURS[name]
         else:
             raise ValueError(
-                f"unknown style {name!r} in {spec!r}: a spec is made of {', '.join(ATTRIBUTES)}, "
-                f"{', '.join(COLOURS)} and highlight_<colour>, joined by '_'"
+                f"unknown style {name!r} in {spec!r}: a spec is made of {', '.join(_ATTRIBUTES)}, "
+                f"{', '.join(_COLOURS)} and highlight_<colour>, joined by '_'"
                 )
         i += 1
-    order = list(ATTRIBUTES.values())
+    order = list(_ATTRIBUTES.values())
     attributes.sort(key = order.index)
     return "".join(attributes) + colour + background, ESC
 
 
-#* spec -> what `_escapes` answered.
+#* spec -> what `_escapes` answered: the specs of the colours every terminal shows (the hot path),
+#* and those with a 24-bit colour (`38;2;` / `48;2;`), which are asked whether the terminal shows them.
 _ESCAPES: dict[str, tuple[str, str]] = {}
+_RGB_ESCAPES: dict[str, tuple[str, str]] = {}
+
+
+class TrueColourWarning(RuntimeWarning):
+    """A spec has a 24-bit colour and the terminal does not seem to show those: the text is plain."""
+
+
+#* Whether the terminal shows 24-bit colour: None until a 24-bit spec is first written.
+_SHOWS_RGB: bool | None = None
+_warned = False
+_RGB_PROGRAMS = ("iTerm.app", "vscode", "WezTerm", "ghostty", "Hyper", "Tabby")
+_RGB_TERMS = ("-direct", "kitty", "alacritty", "ghostty", "wezterm", "foot", "truecolor", "24bit")
+
+
+def _terminal_shows_rgb() -> bool:
+    """
+    Whether the terminal shows 24-bit colour, as far as it can be told: `COLORTERM=truecolor`
+    (or `24bit`), the convention; or a terminal known to (Windows Terminal, a `TERM_PROGRAM` or
+    `TERM` of one); or, on Windows, a console that took the escape sequences.
+    """
+    env = os.environ
+    if env.get("COLORTERM", "").lower() in ("truecolor", "24bit") or env.get("WT_SESSION"):
+        return True
+    if env.get("TERM_PROGRAM", "") in _RGB_PROGRAMS:
+        return True
+    term = env.get("TERM", "").lower()
+    if any(name in term for name in _RGB_TERMS):
+        return True
+    return sys.platform == "win32" and bool(_CONSOLE_SHOWS_ESCAPES)
+
+
+def _shows_rgb(spec: str) -> bool:
+    """Whether to write the 24-bit `spec`: always where colours are forced; else as the terminal says, with one warning."""
+    global _SHOWS_RGB, _warned
+    if _CHOSEN or os.environ.get(FORCE_COLOR):        #* forced: the reader knows best (a CI log, a viewer)
+        return True
+    if _SHOWS_RGB is None:
+        _SHOWS_RGB = _terminal_shows_rgb()
+    if not _SHOWS_RGB and not _warned:
+        _warned = True
+        import warnings
+        warnings.warn(
+            f"the terminal does not seem to show 24-bit colour ({spec!r}): such text is written plain. "
+            "Set COLORTERM=truecolor or FORCE_COLOR=1 if it does",
+            TrueColourWarning, stacklevel = 4,
+            )
+    return _SHOWS_RGB
+
+
+def _format_new(txt: str, spec: str) -> str:
+    """`formatter` for a spec not in `_ESCAPES`: one seen for the first time, or one with a 24-bit colour."""
+    escapes = _RGB_ESCAPES.get(spec)
+    if escapes is None:
+        escapes = _escapes(spec)
+        if "8;2;" not in escapes[0]:
+            _ESCAPES[spec] = escapes
+            return f"{escapes[0]}{txt}{escapes[1]}"
+        _RGB_ESCAPES[spec] = escapes
+    if not _shows_rgb(spec):
+        return txt
+    return f"{escapes[0]}{txt}{escapes[1]}"
 
 
 def formatter(text: Any, spec: str) -> str:
@@ -407,48 +546,21 @@ def formatter(text: Any, spec: str) -> str:
     Returns:
         str: The text between the escape sequences of its styles, or the plain text.
 
-    Supported formats:
-        Styles:
-            * `bold`
-            * `dim`
-            * `italic`
-            * `underline`
-
-        Colours:
-            * `black`
-            * `red`
-            * `green`
-            * `yellow`
-            * `blue`
-            * `magenta`
-            * `cyan`
-            * `white`
-            * `grey`
-            * `orange`
-            * `pink`
-            * `purple`
-            * `brown`
-            * `teal`
-            * `gold`
-            * `maroon`
-            * `navy`
-            * `olive`
-            * `coral`
-            * `lime`
-
-        Backgrounds:
-            * `highlight_<colour>` where `<colour>` is one of the colours above
+    A spec is made of the names of `ATTRIBUTES`, at most one of `COLOURS`, and at most one
+    `highlight_<colour>` (a name of `BACKGROUNDS`). A 24-bit colour (`orange` and those after it,
+    and those of `create_colour`) is written only where the terminal seems to show it, or where
+    colours are forced; elsewhere the text is plain, with one `TrueColourWarning` per process.
 
     Example:
         >>> formatter("hello", "bold_red")
-        '\\x1b[1m\\x1b[31mhello\\x1b[0m'    # imagine bold red in terminal
+        '\\x1b[1m\\x1b[31mhello\\x1b[0m'
     """
     txt = str(text)
-    if not (colours_on() if _decided is None else _decided):
+    if not (_colours_now() if _decided is None else _decided):
         return txt
     escapes = _ESCAPES.get(spec)
     if escapes is None:
-        escapes = _ESCAPES[spec] = _escapes(spec)
+        return _format_new(txt, spec)
     return f"{escapes[0]}{txt}{escapes[1]}"         #* one string made: `a + t + b` copied a long text twice
 
 

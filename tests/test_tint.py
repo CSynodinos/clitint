@@ -1,4 +1,4 @@
-from clitint import formatter, strip_colours, escapes, one_decision, coloured
+from clitint import formatter, strip_colours, escapes, one_decision, colours_on, TrueColourWarning
 from typing import Any
 import clitint
 import clitint._tint as tint
@@ -6,6 +6,7 @@ import subprocess
 import sys
 import os
 import pytest
+import warnings
 
 
 @pytest.fixture(autouse = True)
@@ -19,6 +20,14 @@ def colours_wanted(monkeypatch):
     monkeypatch.setenv("FORCE_COLOR", "1")
     monkeypatch.setattr(tint, "_CHOSEN", None)
     monkeypatch.setattr(tint, "_decided", None)
+    #* A colour a test creates is gone after it, and the 24-bit answer and its warning are asked afresh.
+    colours, backgrounds = dict(tint._COLOURS), dict(tint._BACKGROUNDS)
+    monkeypatch.setattr(tint, "_RGB_ESCAPES", {})
+    monkeypatch.setattr(tint, "_SHOWS_RGB", None)
+    monkeypatch.setattr(tint, "_warned", False)
+    yield
+    tint._COLOURS.clear(); tint._COLOURS.update(colours)
+    tint._BACKGROUNDS.clear(); tint._BACKGROUNDS.update(backgrounds)
 
 
 #* The escape sequences, written out here a second time: what a terminal is to be sent.
@@ -158,16 +167,16 @@ def test_escapes_are_the_formatter_s_sequences_whatever_colours_say(monkeypatch)
 
 def test_one_decision_asks_once_and_leaves_nothing_behind(monkeypatch):
     asked = []
-    real = tint.colours_on
-    monkeypatch.setattr(tint, "colours_on", lambda: asked.append(1) or real())
+    real = tint._colours_now
+    monkeypatch.setattr(tint, "_colours_now", lambda: asked.append(1) or real())
     with one_decision():
         words = [formatter(w, "bold") for w in "abcde"]
-        assert coloured()
+        assert colours_on()                                         # the answer kept: not asked again
     assert len(asked) == 1 and all("\x1b[" in w for w in words)
     assert tint._decided is None
     monkeypatch.setenv("CLITINT_COLOURS_OFF", "1")
     with one_decision():
-        assert formatter("x", "bold") == "x" and not coloured()
+        assert formatter("x", "bold") == "x" and not colours_on()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -301,11 +310,189 @@ def test_an_off_switch_is_a_name(name):
         clitint.add_off_switch(name)
 
 
+def test_create_colour_adds_a_name_for_specs_and_backgrounds(monkeypatch):
+    assert clitint.create_colour("steel", 70, 130, 180) == "steel"
+    assert formatter("x", "steel") == "\x1b[38;2;70;130;180mx\x1b[0m"
+    assert formatter("x", "bold_steel") == "\x1b[1m\x1b[38;2;70;130;180mx\x1b[0m"
+    assert formatter("x", "white_highlight_steel") == "\x1b[37m\x1b[48;2;70;130;180mx\x1b[0m"
+    assert escapes("steel") == ("\x1b[38;2;70;130;180m", "\x1b[0m")
+    with pytest.raises(ValueError, match = "two colours"):
+        formatter("x", "red_steel")
+    assert clitint.create_colour("ink", 0, 0, 0) == "ink" and formatter("x", "ink") == "\x1b[38;2;0;0;0mx\x1b[0m"
+
+
+@pytest.mark.parametrize("name, why", [
+    ("", "without '_'"), ("steel_blue", "without '_'"), ("red", "already a style"), ("bold", "already a style"),
+    ("highlight", "already a style"), ("orange", "another colour"),
+    ])
+def test_create_colour_refuses_a_bad_name(name, why, monkeypatch):
+    with pytest.raises(ValueError, match = why):
+        clitint.create_colour(name, 1, 2, 3)
+    assert name not in tint.COLOURS or name in CODES                  # nothing was added
+
+
+@pytest.mark.parametrize("rgb", [(256, 0, 0), (0, -1, 0), (0, 0, 999)])
+def test_create_colour_refuses_a_component_out_of_range(rgb, monkeypatch):
+    with pytest.raises(ValueError, match = "0 to 255"):
+        clitint.create_colour("steel", *rgb)
+    assert "steel" not in tint.COLOURS
+
+
+@pytest.mark.parametrize("bad", [(None, 1, 2, 3), (5, 1, 2, 3), ("steel", 1.0, 2, 3), ("steel", 1, "2", 3), ("steel", True, 2, 3)])
+def test_create_colour_refuses_a_wrong_type(bad, monkeypatch):
+    with pytest.raises(TypeError):
+        clitint.create_colour(*bad)
+    assert "steel" not in tint.COLOURS
+
+
+def test_create_multiple_colours_adds_each_and_returns_the_names_in_order(monkeypatch):
+    assert clitint.create_multiple_colours({"steel": (70, 130, 180), "sand": (194, 178, 128)}) == ("steel", "sand")
+    assert formatter("x", "steel_highlight_sand") == "\x1b[38;2;70;130;180m\x1b[48;2;194;178;128mx\x1b[0m"
+    assert clitint.create_multiple_colours({}) == ()
+
+
+@pytest.mark.parametrize("third", [
+    ("red", (1, 2, 3)), ("ink_blue", (1, 2, 3)), ("ink", (1, 2, 300)), ("ink", (1, 2)), ("ink", [1, 2, 3]),
+    ("ink", (1, 2, "3")),
+    ])
+def test_create_multiple_colours_is_all_or_none(third, monkeypatch):
+    colours_before, backgrounds_before = dict(tint.COLOURS), dict(tint.BACKGROUNDS)
+    with pytest.raises((TypeError, ValueError)):
+        clitint.create_multiple_colours({"steel": (70, 130, 180), "sand": (194, 178, 128), third[0]: third[1]})
+    assert tint.COLOURS == colours_before and tint.BACKGROUNDS == backgrounds_before
+    assert clitint.create_multiple_colours({"steel": (70, 130, 180)}) == ("steel",)    # the names are free again
+
+
+def test_create_colour_matches_termcolor_s_rgb():
+    termcolor = pytest.importorskip("termcolor")
+    name = clitint.create_colour("sand", 194, 178, 128)
+    assert formatter("x", name) == termcolor.colored("x", (194, 178, 128), force_color = True)
+
+
+def test_the_tables_are_read_only():
+    for table in (clitint.ATTRIBUTES, clitint.COLOURS, clitint.BACKGROUNDS):
+        with pytest.raises(TypeError):
+            table["steel"] = "\x1b[1m"                                    # type: ignore[index]
+    clitint.create_colour("steel", 70, 130, 180)
+    assert clitint.COLOURS["steel"] == "\x1b[38;2;70;130;180m"             # a view: what is created shows
+
+
+def test_create_colour_twice_with_the_same_components_is_once():
+    assert clitint.create_colour("steel", 70, 130, 180) == clitint.create_colour("steel", 70, 130, 180) == "steel"
+    assert clitint.create_colour("teal", 0, 128, 128) == "teal"           # a built-in one, the same: fine too
+    assert formatter("x", "steel") == "\x1b[38;2;70;130;180mx\x1b[0m"
+    with pytest.raises(ValueError, match = "another colour"):
+        clitint.create_colour("steel", 70, 130, 181)
+    assert formatter("x", "steel") == "\x1b[38;2;70;130;180mx\x1b[0m"     # not changed
+
+
+def test_create_multiple_colours_keeps_a_colour_that_was_there_when_it_fails():
+    with pytest.raises(ValueError):
+        clitint.create_multiple_colours({"teal": (0, 128, 128), "steel": (70, 130, 180), "ink": (1, 2, 300)})
+    assert "teal" in clitint.COLOURS and "steel" not in clitint.COLOURS
+    assert clitint.create_multiple_colours({"teal": (0, 128, 128), "steel": (70, 130, 180)}) == ("teal", "steel")
+
+
+def test_colours_on_gives_the_answer_kept_and_decide_asks_again(monkeypatch):
+    with one_decision() as on:
+        monkeypatch.setenv("CLITINT_COLOURS_OFF", "1")
+        assert on is True and colours_on() is True
+    assert colours_on() is False
+    monkeypatch.delenv("CLITINT_COLOURS_OFF")
+    assert clitint.decide() is True
+    monkeypatch.setenv("CLITINT_COLOURS_OFF", "1")
+    assert colours_on() is True and clitint.decide() is False and colours_on() is False
+    clitint.release()
+
+
+def test_coloured_is_gone():
+    assert not hasattr(clitint, "coloured") and "coloured" not in clitint.__all__
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  24-BIT COLOUR WHERE THE TERMINAL MAY NOT SHOW IT
+# ═════════════════════════════════════════════════════════════════════════════
+
+TRUE_COLOUR_NAMES = ("COLORTERM", "WT_SESSION", "TERM_PROGRAM", "TERM")
+
+
+@pytest.fixture
+def on_a_plain_terminal(monkeypatch):
+    """Colours on because both streams are terminals (not forced), on a terminal that says nothing of 24-bit."""
+    monkeypatch.delenv("FORCE_COLOR")
+    for name in TRUE_COLOUR_NAMES:
+        monkeypatch.delenv(name, raising = False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setattr(tint, "_are_streams_terminals", lambda: True)
+    assert colours_on()
+
+
+def test_24_bit_text_is_plain_with_one_warning_where_the_terminal_may_not_show_it(on_a_plain_terminal):
+    with pytest.warns(TrueColourWarning, match = "24-bit") as caught:
+        assert formatter("x", "bold_teal") == "x"                          # no formatting at all
+    assert caught[0].filename == __file__                                  # points at the caller
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")                                     # once per process: no second one
+        assert formatter("x", "orange") == "x"
+        assert formatter("x", f"{clitint.create_colour('steel', 70, 130, 180)}") == "x"
+        assert formatter("x", "red_highlight_blue") == "\x1b[31m\x1b[44mx\x1b[0m"   # the basic colours: as ever
+    assert escapes("teal") == ("\x1b[38;2;0;128;128m", "\x1b[0m")           # the raw sequences, as asked
+
+
+@pytest.mark.parametrize("name, value", [
+    ("COLORTERM", "truecolor"), ("COLORTERM", "24bit"), ("COLORTERM", "TrueColor"), ("WT_SESSION", "1d3b"),
+    ("TERM_PROGRAM", "iTerm.app"), ("TERM_PROGRAM", "vscode"), ("TERM_PROGRAM", "WezTerm"),
+    ("TERM", "xterm-kitty"), ("TERM", "alacritty"), ("TERM", "xterm-direct"), ("TERM", "foot"),
+    ])
+def test_24_bit_text_is_written_where_the_terminal_says_it_shows_it(name, value, on_a_plain_terminal, monkeypatch):
+    monkeypatch.setenv(name, value)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert formatter("x", "teal") == "\x1b[38;2;0;128;128mx\x1b[0m"
+
+
+@pytest.mark.parametrize("name, value", [
+    ("COLORTERM", ""), ("COLORTERM", "yes"), ("TERM_PROGRAM", "Apple_Terminal"), ("TERM", "xterm-256color"),
+    ("TERM", "screen"),
+    ])
+def test_a_terminal_that_says_nothing_of_24_bit_is_taken_not_to_show_it(name, value, on_a_plain_terminal, monkeypatch):
+    monkeypatch.setenv(name, value)
+    assert tint._terminal_shows_rgb() is False
+
+
+def test_a_windows_console_that_took_the_sequences_shows_24_bit(on_a_plain_terminal, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(tint, "_CONSOLE_SHOWS_ESCAPES", True)
+    assert tint._terminal_shows_rgb() is True
+    monkeypatch.setattr(tint, "_CONSOLE_SHOWS_ESCAPES", False)
+    assert tint._terminal_shows_rgb() is False
+
+
+@pytest.mark.parametrize("force", ["FORCE_COLOR", "turn_colours_on"])
+def test_forced_colours_write_24_bit_without_asking(force, on_a_plain_terminal, monkeypatch):
+    if force == "FORCE_COLOR":
+        monkeypatch.setenv("FORCE_COLOR", "1")
+    else:
+        clitint.turn_colours_on()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert formatter("x", "teal") == "\x1b[38;2;0;128;128mx\x1b[0m"
+    assert tint._SHOWS_RGB is None                                         # the terminal was not even asked
+
+
+def test_24_bit_follows_the_answer_kept_by_one_decision(on_a_plain_terminal, monkeypatch):
+    monkeypatch.setenv("COLORTERM", "truecolor")
+    with one_decision():
+        assert formatter("x", "teal") == "\x1b[38;2;0;128;128mx\x1b[0m"
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert formatter("x", "teal") == "x"
+
+
 def test_decide_keeps_the_answer_until_release(monkeypatch):
     assert clitint.decision() is None
     assert clitint.decide() is True
     monkeypatch.setenv("CLITINT_COLOURS_OFF", "1")
-    assert clitint.decision() is True and coloured() and formatter("x", "red") == styled("x", "red")
+    assert clitint.decision() is True and colours_on() and formatter("x", "red") == styled("x", "red")
     clitint.release()
     assert clitint.decision() is None and formatter("x", "red") == "x"
 

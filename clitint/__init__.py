@@ -6,20 +6,22 @@ from ._tint import (
     turn_colours_off,
     turn_colours_on,
     let_the_environment_decide,
-    coloured,
     decide,
     decision,
     release,
     add_off_switch,
+    create_colour,
+    create_multiple_colours,
     escapes,
     one_decision,
+    TrueColourWarning,
     ATTRIBUTES,
     COLOURS,
     BACKGROUNDS,
     ESC,
     )
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 __all__ = [
     "formatter",
@@ -29,12 +31,14 @@ __all__ = [
     "turn_colours_on",
     "let_the_environment_decide",
     "one_decision",
-    "coloured",
     "decide",
     "decision",
     "release",
     "add_off_switch",
+    "create_colour",
+    "create_multiple_colours",
     "escapes",
+    "TrueColourWarning",
     "ATTRIBUTES",
     "COLOURS",
     "BACKGROUNDS",
