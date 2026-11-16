@@ -19,21 +19,58 @@ FORCE_COLOR = "FORCE_COLOR"
 TERM = "TERM"
 
 #* The attributes a spec may name, and the sequence that switches each on. Written in front of a colour.
-ATTRIBUTES: dict[str, str] = {
-    "bold": "\x1b[1m", "dim": "\x1b[2m", "italic": "\x1b[3m", "underline": "\x1b[4m",
+ATTRIBUTES = {
+    "bold": "\x1b[1m",
+    "dim": "\x1b[2m",
+    "italic": "\x1b[3m",
+    "underline": "\x1b[4m",
     }
 #* The colours, as the text's colour. ``highlight_<colour>`` is the same colour as its background.
 #* The sequences are the ones termcolor writes (``orange`` is its (255, 165, 0)), so text made
 #* with termcolor and with clitint is the same, byte for byte.
-COLOURS: dict[str, str] = {
-    "black": "\x1b[30m", "red": "\x1b[31m", "green": "\x1b[32m", "yellow": "\x1b[33m", "blue": "\x1b[34m",
-    "magenta": "\x1b[35m", "cyan": "\x1b[36m", "white": "\x1b[37m", "grey": "\x1b[90m",
+COLOURS = {
+    "black": "\x1b[30m",
+    "red": "\x1b[31m",
+    "green": "\x1b[32m",
+    "yellow": "\x1b[33m",
+    "blue": "\x1b[34m",
+    "magenta": "\x1b[35m",
+    "cyan": "\x1b[36m",
+    "white": "\x1b[37m",
+    "grey": "\x1b[90m",
     "orange": "\x1b[38;2;255;165;0m",
+    "pink": "\x1b[38;2;255;192;203m",
+    "purple": "\x1b[38;2;128;0;128m",
+    "brown": "\x1b[38;2;165;42;42m",
+    "teal": "\x1b[38;2;0;128;128m",
+    "gold": "\x1b[38;2;255;215;0m",
+    "maroon": "\x1b[38;2;128;0;0m",
+    "navy": "\x1b[38;2;0;0;128m",
+    "olive": "\x1b[38;2;128;128;0m",
+    "coral": "\x1b[38;2;255;127;80m",
+    "lime": "\x1b[38;2;0;255;0m",
     }
-BACKGROUNDS: dict[str, str] = {
-    "black": "\x1b[40m", "red": "\x1b[41m", "green": "\x1b[42m", "yellow": "\x1b[43m", "blue": "\x1b[44m",
-    "magenta": "\x1b[45m", "cyan": "\x1b[46m", "white": "\x1b[47m", "grey": "\x1b[100m",
+BACKGROUNDS = {
+    "black": "\x1b[40m",
+    "red": "\x1b[41m",
+    "green": "\x1b[42m",
+    "yellow": "\x1b[43m",
+    "blue": "\x1b[44m",
+    "magenta": "\x1b[45m",
+    "cyan": "\x1b[46m",
+    "white": "\x1b[47m",
+    "grey": "\x1b[100m",
     "orange": "\x1b[48;2;255;165;0m",
+    "pink": "\x1b[48;2;255;192;203m",
+    "purple": "\x1b[48;2;128;0;128m",
+    "brown": "\x1b[48;2;165;42;42m",
+    "teal": "\x1b[48;2;0;128;128m",
+    "gold": "\x1b[48;2;255;215;0m",
+    "maroon": "\x1b[48;2;128;0;0m",
+    "navy": "\x1b[48;2;0;0;128m",
+    "olive": "\x1b[48;2;128;128;0m",
+    "coral": "\x1b[48;2;255;127;80m",
+    "lime": "\x1b[48;2;0;255;0m",
     }
 RESET = "\x1b[0m"
 
@@ -331,8 +368,9 @@ def formatter(text: Any, spec: str) -> str:
         spec (str): Styles joined by ``_``, in any order: ``"bold_red"``, ``"cyan"``,
             ``"underline_white_highlight_blue"``. Attributes: ``bold``, ``dim``, ``italic``,
             ``underline``. Colours: ``black``, ``red``, ``green``, ``yellow``, ``blue``,
-            ``magenta``, ``cyan``, ``white``, ``grey``, ``orange``; ``highlight_<colour>`` is a
-            background. Anything else is a ``ValueError``.
+            ``magenta``, ``cyan``, ``white``, ``grey``, ``orange``, ``pink``, ``purple``,
+            ``brown``, ``teal``, ``gold``, ``maroon``, ``navy``, ``olive``, ``coral``,
+            ``lime``; ``highlight_<colour>`` is a background. Anything else is a ``ValueError``.
 
     Returns:
         str: The text between the escape sequences of its styles, or the plain text.
