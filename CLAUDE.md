@@ -8,7 +8,7 @@ It is enforced's `_formatting_tool.py` made a project of its own (2026-11-15, th
 `/mnt/d/dev/enforced`), and **enforced's one dependency** from its next release (`clitint>=0.1.0`). Each enforced module
 imports what it uses from clitint directly; enforced has no colour variable of its own (its users set `CLITINT_COLOURS_OFF`), exports `turn_colours_off` / `turn_colours_on`, and uses
 `decide` / `decision` / `release` around a message. Its tests compare whole coloured messages byte for byte, and
-some patch `clitint._tint` (`_CHOSEN`, `colours_on`): **a change here is a change to enforced**, so run enforced's
+some patch `clitint._tint` (`_CHOSEN`, `_decided`, `_colours_now`): **a change here is a change to enforced**, so run enforced's
 pytest and simulation too (`~/venvs/python_validate_3.14` and `_3.13` have clitint installed editable from here).
 
 What differs from enforced's copy:
@@ -18,8 +18,20 @@ What differs from enforced's copy:
   once, both streams); where it refuses, plain unless forced. Tried with a stand-in kernel32: no Windows machine here.
 - More styles: enforced has only those its messages use (bold and seven colours). Here also `dim`, `italic`,
   `underline`, `black`, `white`, `grey`, eleven 24-bit colours (`orange` ... `lime`), backgrounds `highlight_<colour>`,
-  and `create_colour(name, r, g, b)` (a 24-bit colour under a new name, in `COLOURS` and `BACKGROUNDS`; returns the
-  name), `create_multiple_colours({name: (r, g, b)})` (all or none). Two colours or two backgrounds in a spec are a `ValueError`. No check for 24-bit support (none is reliable).
+  and `create_colour(name, r, g, b)` (a 24-bit colour under a new name; returns the name; the same components again
+  are a no-op, so two libraries can each create theirs; other components under a taken name: `ValueError`),
+  `create_multiple_colours({name: (r, g, b)})` (all or none; a colour there before stays). Two colours or two
+  backgrounds in a spec are a `ValueError`. `ATTRIBUTES` / `COLOURS` / `BACKGROUNDS` are read-only views
+  (`MappingProxyType`, got as `type(type.__dict__)`: no `types` import) of `_ATTRIBUTES` / `_COLOURS` / `_BACKGROUNDS`.
+- 24-bit colour (owner's decision, 2026-11-16): written where the terminal says it shows it (`_terminal_shows_rgb`:
+  `COLORTERM`, `WT_SESSION`, `TERM_PROGRAM`, `TERM`, a Windows console with sequences; asked once, `_SHOWS_RGB`) or
+  colours are forced; elsewhere plain text and one `TrueColourWarning` per process. Off the hot path: specs with a
+  24-bit colour are kept in `_RGB_ESCAPES`, not `_ESCAPES`, so `formatter` sends them to `_format_new`. `escapes`
+  gives the raw sequences without asking.
+- `coloured()` is gone (2026-11-16): `colours_on()` gives the answer kept by `one_decision` / `decide` (enforced
+  calls `colours_on` where it called `coloured`). The rules themselves are `_colours_now()`, which `formatter`,
+  `one_decision` and `decide` call: testing the kept answer inside `colours_on` too cost `formatter` 15 ns of 135.
+  A test that counts or fixes the answers patches `_colours_now` (clitint's and enforced's do).
 - `let_the_environment_decide()` undoes `turn_colours_off` / `turn_colours_on`.
 - For a library built on it: `add_off_switch(name)` (its own `NAME=1`), and `decide()` / `decision()` / `release()`,
   the fast form of `one_decision` (which nests: an inner one keeps the outer answer).
@@ -69,7 +81,7 @@ publish.sh, env.sh    upload to (Test)PyPI; the venv. tokens (git-ignored) is th
   place is seen, and asked as a mapping). `_ENV` is None where there is no such dictionary. A CPython detail, accepted.
   clitint's own off switch is tested on its own (`_K_OFF`); only `add_off_switch` names go through a loop (`_K_MORE`).
 - Whether the streams are terminals is remembered until `sys.stdout` or `sys.stderr` is replaced (`_streams`).
-- The check reads the environment at every call (92 ns with colours forced, 38 with `NO_COLOR` in compare.py, against termcolor's
+- The check reads the environment at every call (`colours_on()`: 100 ns with colours forced, 49 with `NO_COLOR` in compare.py, 2026-11-16, against termcolor's
   12 and TermTint's 64, which keep their first answer): that is what lets it see `NO_COLOR` set while a program runs,
   and `one_decision` is how a batch pays it once. Don't cache it.
   Trimmed on 2026-11-15, each step timed first (the owner: "only implement if worth it"). Kept: the identity test

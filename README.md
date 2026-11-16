@@ -2,7 +2,7 @@
 
 # clitint
 
-**Very fast terminal text formatting for Python 3.13+, with no dependencies.**
+**Fast terminal text formatting for Python 3.13+, with no dependencies.**
 
 ![Python](https://img.shields.io/badge/python-3.13%2B-blue)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
@@ -16,16 +16,19 @@ and it comes out plain.
 This library is ideal for simple and very fast formatting of text on libraries and command-line tools.
 
 ```python
-from clitint import formatter
+from clitint import formatter, create_colour
 
 text_1 = formatter("error:", "bold_red")
 text_2 = formatter("warning", "underline_black_highlight_yellow")
 print(text_1, "file not found")
 print(text_2)
+
+hot_pink = create_colour("hotpink", 255, 105, 180)   # your own RGB colour, by name in any spec
+print(formatter("done", f"bold_{hot_pink}"), formatter("ok", f"black_highlight_{hot_pink}"))
 ```
 
 </div>
-<img src="https://raw.githubusercontent.com/CSynodinos/clitint/main/docs/example.svg" alt="clitint printing a bold red 'error:' and an underlined black-on-yellow 'warning' in a terminal, and plain text when redirected to a file" width="640">
+<img src="https://raw.githubusercontent.com/CSynodinos/clitint/main/docs/example.svg" alt="clitint printing a bold red 'error:', an underlined black-on-yellow 'warning', and 'done' in bold hot pink next to 'ok' on a hot pink background in a terminal, and plain text when redirected to a file" width="640">
 
 </div>
 
@@ -73,10 +76,12 @@ steel = create_colour("steel", 70, 130, 180)
 print(formatter("ok", f"bold_{steel}"), formatter("ok", f"white_highlight_{steel}"))
 ```
 
-A name is one word without `_`, not already a style; each component is an int from 0 to 255.
+A name is one word without `_`, and not an attribute or `highlight`; each component is an int from 0 to 255.
+Creating a name again with the same components does nothing, so two libraries can each create the colour they
+need. Creating it with different components raises a `ValueError`.
 
 `create_multiple_colours` makes several at once and returns their names in order. It is all or nothing: if one
-is refused, none are added.
+is refused, none of the new ones are added.
 
 ```python
 from clitint import create_multiple_colours
@@ -84,11 +89,22 @@ from clitint import create_multiple_colours
 steel, sand = create_multiple_colours({"steel": (70, 130, 180), "sand": (194, 178, 128)})
 ```
 
-> [!WARNING]
-> `orange` and the colours after it in the table, and every colour made with `create_colour`, are 24-bit
-> sequences. Most terminals of today show them (Windows Terminal, the Windows 10 and 11 console, iTerm2, GNOME
-> Terminal, VS Code, tmux 3); an older one shows the text in its default colour. clitint doesn't check what the
-> terminal can do: `black` to `grey` work everywhere.
+### 24-bit colours
+
+`orange` and the colours after it in the table, and every colour made with `create_colour`, are 24-bit (RGB).
+`black` to `grey` work on every terminal; a 24-bit colour is written only where the terminal says it shows one:
+
+- `COLORTERM=truecolor` or `24bit` (the convention; GNOME Terminal, Konsole and most others set it);
+- Windows Terminal (`WT_SESSION`), or a `TERM_PROGRAM` of iTerm2, VS Code, WezTerm, Ghostty, Hyper or Tabby;
+- a `TERM` of kitty, Alacritty, Ghostty, WezTerm or foot, or one ending in `-direct`;
+- on Windows, a console that took the escape sequences.
+
+Elsewhere the text is written **plain**, and the first time it happens a `TrueColourWarning` is raised (once per
+process). When colours are forced (`FORCE_COLOR`, `turn_colours_on()`) 24-bit colours are always written.
+
+> [!TIP]
+> If your terminal shows 24-bit colour but gets the warning, set `COLORTERM=truecolor`. To silence it:
+> `warnings.simplefilter("ignore", clitint.TrueColourWarning)`.
 
 ## 🖥️ When text is coloured
 
@@ -123,21 +139,23 @@ from clitint import turn_colours_off, turn_colours_on, let_the_environment_decid
 turn_colours_off()              # plain from now on, whatever the environment says (a --no-color flag)
 turn_colours_on()               # coloured from now on, even into a file or a pipe (a --color flag)
 let_the_environment_decide()    # back to the rules above
-colours_on()                    # the answer right now: True or False
+colours_on()                    # the answer right now: True or False (inside one_decision, the answer kept)
 ```
 
 ### Building one message: decide once
 
-Every `formatter` call checks the environment and the streams. That is the only performance bottleneck this library has. It is insignificant for most use cases. However, when a message is built from many pieces (hunderds or thousands of calls to formatter), that can slowdown the process noticeably. Using `one_decision` avoids repeated checks and improves performance in such cases many times over.
+Every `formatter` call checks the environment and the streams. That is the only real cost this library has, and
+it is insignificant for most uses. But when a message is built from many pieces (hundreds or thousands of
+`formatter` calls), it adds up. `one_decision` checks once for the whole block, and is many times faster there.
 
 ```python
 from clitint import formatter, one_decision
 
-with one_decision():
-    line = formatter("a", "red") + " " + formatter("b", "blue") + " " + formatter("c", "green") + ...
+with one_decision() as on:          # `on`: the answer, True or False
+    line = formatter("a", "red") + " " + formatter("b", "blue") + " " + formatter("c", "green")
 ```
 
-Blocks can be nested, and an inner one keeps the outer answer. Something that changes the answer inside the
+Inside the block, `colours_on()` gives the same answer. Blocks can be nested, and an inner one keeps the outer answer. Something that changes the answer inside the
 block, such as `turn_colours_off()`, takes effect only after the block ends. The answer lives in a module global,
 so don't build messages in several threads at once.
 
@@ -155,18 +173,18 @@ release()       # forget it: each formatter call checks again
 ### Raw escape sequences, for hot loops
 
 `escapes` gives the sequences that go before and after the text, two per spec, in one flat tuple. They are the
-same whether colours are on or not, so check `coloured()` yourself. It returns the answer kept by
-`one_decision` / `decide` if there is one, and `colours_on()` otherwise:
+same whether colours are on or not, and a 24-bit colour is not checked against the terminal, so ask
+`colours_on()` yourself:
 
 ```python
-from clitint import escapes, coloured
+from clitint import escapes, colours_on
 
 red, reset, bold, bold_reset = escapes("red", "bold")
-text = f"{red}x{reset}" if coloured() else "x"
+text = f"{red}x{reset}" if colours_on() else "x"
 ```
 
-`ATTRIBUTES`, `COLOURS` and `BACKGROUNDS` are the tables of names and their sequences, and `ESC` is the reset
-sequence (`"\x1b[0m"`).
+`ATTRIBUTES`, `COLOURS` and `BACKGROUNDS` are read-only views of the names and their sequences (`create_colour`
+is the way to add one), and `ESC` is the reset sequence (`"\x1b[0m"`).
 
 ### Removing colours
 

@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="210" viewBox="0 0 640 210" font-family="'JetBrains Mono','Fira Code',Menlo,Consolas,monospace" font-size="15">
-  <rect width="640" height="210" rx="10" fill="#1e1e2e"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="240" viewBox="0 0 640 240" font-family="'JetBrains Mono','Fira Code',Menlo,Consolas,monospace" font-size="15">
+  <rect width="640" height="240" rx="10" fill="#1e1e2e"/>
   <rect width="640" height="34" rx="10" fill="#2a2a3c"/>
   <rect y="24" width="640" height="10" fill="#2a2a3c"/>
   <circle cx="20" cy="17" r="6" fill="#ff5f57"/>
@@ -11,5 +11,7 @@
   <rect x="20" y="114" width="64" height="22" fill="#e0af68"/>
   <text x="20" y="130" fill="#000000" text-decoration="underline">warning</text>
   <line x1="20" y1="132" x2="83" y2="132" stroke="#000" stroke-width="1"/>
-  <text x="20" y="170" fill="#cdd6f4"><tspan fill="#a6e3a1">$</tspan> python example.py &gt; out.txt <tspan fill="#6c7086"># plain text, no escape codes</tspan></text>
+  <rect x="65" y="144" width="19" height="22" fill="#ff69b4"/>
+  <text x="20" y="160" xml:space="preserve"><tspan fill="#ff69b4" font-weight="bold">done</tspan> <tspan fill="#000000">ok</tspan></text>
+  <text x="20" y="200" fill="#cdd6f4"><tspan fill="#a6e3a1">$</tspan> python example.py &gt; out.txt <tspan fill="#6c7086"># plain text, no escape codes</tspan></text>
 </svg>
