@@ -6,16 +6,18 @@ the API; such changes are listed under **Changed** and marked **breaking**).
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-27
+
 ### Added
 
 - **A documentation site**: [csynodinos.github.io/clitint](https://csynodinos.github.io/clitint/), made from the
   README and this changelog.
-
-## [0.1.6] - 2026-11-16
+- This changelog.
 
 ### Fixed
 
-- The README's picture shows the example as it is now, with a colour made by `create_colour`.
+- The README's picture shows the example as it is now, with a colour made by `create_colour`, and is linked by
+  its full address so that PyPI shows it.
 
 ## [0.1.5] - 2026-11-16
 
