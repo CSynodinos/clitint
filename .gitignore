@@ -13,6 +13,7 @@ prototypes/
 env.sh
 publish.sh
 tok*
+CLAUDE.md
 
 # what the benchmark's --report and the fuzz's --dump are pointed at
 out/
