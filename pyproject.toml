@@ -26,13 +26,16 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/CSynodinos/clitint"
+Homepage = "https://csynodinos.github.io/clitint/"
+Documentation = "https://csynodinos.github.io/clitint/"
 Repository = "https://github.com/CSynodinos/clitint"
 Issues = "https://github.com/CSynodinos/clitint/issues"
-Changelog = "https://github.com/CSynodinos/clitint/releases"
+Changelog = "https://csynodinos.github.io/clitint/changelog/"
 
 [project.optional-dependencies]
 dev = ["pytest", "mypy", "build", "twine"]
+# The site (mkdocs.yml): pip install -e ".[docs]", then mkdocs serve.
+docs = ["mkdocs-material>=9.5,<10"]
 
 [tool.setuptools.dynamic]
 version = { attr = "clitint.__version__" }
